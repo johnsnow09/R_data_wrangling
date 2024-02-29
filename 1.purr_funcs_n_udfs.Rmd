@@ -1,0 +1,470 @@
+---
+title: "purr & functions exploration"
+output: 
+  html_notebook:
+    theme: spacelab
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: 
+      collapsed: false
+      smooth_scroll: false
+    number_sections: true
+    toc_depth: 6
+---
+
+
+<style type="text/css">
+
+body, td {
+   font-family: "OCR-B 10 BT";
+}
+code.r{
+  font-family: "OCR-B 10 BT";
+}
+pre {
+  font-family: "OCR-B 10 BT";
+}
+</style>
+
+
+
+# Exploring purr functions
+
+from: 
+
+http://www.rebeccabarter.com/blog/2019-08-19_purrr/
+
+https://adv-r.hadley.nz/functionals.html#purrr-style
+
+## options & settings
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+options(scipen = 999)
+```
+
+
+## Libs
+
+```{r}
+library(tidyverse)
+```
+
+
+## gapminder data
+
+```{r}
+# to download the data directly:
+
+gapminder_orig <- read.csv("https://raw.githubusercontent.com/swcarpentry/r-novice-gapminder/gh-pages/_episodes_rmd/data/gapminder-FiveYearData.csv")
+
+# define a copy of the original dataset that we will clean and play with 
+gapminder <- gapminder_orig
+```
+
+
+```{r}
+head(gapminder)
+```
+
+```{r}
+names(gapminder)
+```
+
+```{r}
+dim(gapminder)
+```
+
+## map & modify from purr
+
+### class
+
+```{r}
+class(gapminder$country)
+```
+
+
+```{r}
+gapminder %>% map_chr(class)
+```
+
+```{r}
+gapminder %>% modify(class)
+```
+
+`modify()` returns in the same output format as input, so it is not a suitable choice in this case
+
+
+### n_distinct
+
+```{r}
+gapminder %>% map_dbl(n_distinct)
+```
+
+### class + n_distinct
+
+```{r}
+gapminder %>% map_df(~data.frame(class = class(.x),
+                                 distinct = n_distinct(.x)))
+```
+
+make sure to pass .x otherwise it will not perform action on columns
+
+`Note` : we have missed the column names above
+
+`Adding column names`
+
+```{r}
+gapminder %>% map_df(~data.frame(class = class(.x),
+                                 distinct = n_distinct(.x)),
+                     .id = "column_name")
+```
+
+defining .x
+
+```{r}
+data.frame(n_distinct = n_distinct(gapminder %>% pluck(1)),
+           class = class(gapminder %>% pluck(1)))
+```
+
+```{r}
+continent_year <- gapminder %>% distinct(continent, year)
+continent_year
+```
+
+
+```{r}
+continents <- continent_year %>% 
+                pull(continent) %>% 
+                as.character
+
+years <- continent_year %>% 
+            pull(year)
+```
+
+
+```{r}
+gapminder %>% 
+  filter(continent == continents[1],
+         year == years[1]) %>% 
+  
+  ggplot() +
+  geom_point(aes(x = gdpPercap, y = lifeExp, col = country)) +
+  ggtitle(paste(continents[1], years[1]))
+```
+
+```{r}
+.x <- continents[1]
+.y <- years[1]
+  
+gapminder %>% 
+  filter(continent == .x,
+         year == .y) %>% 
+  
+  ggplot() +
+  geom_point(aes(x = gdpPercap, y = lifeExp, col = country)) +
+  ggtitle(paste(.x, .y))
+```
+
+Applying above test code for generic usage object
+
+```{r}
+plot_list <- map2(.x = continents, 
+                  .y = years,
+     .f = ~{gapminder %>% 
+  filter(continent == .x,
+         year == .y) %>% 
+  
+  ggplot() +
+  geom_point(aes(x = gdpPercap, y = lifeExp, col = country)) +
+  ggtitle(paste(.x, .y))
+       })
+```
+
+
+```{r}
+plot_list[1]
+```
+
+```{r}
+plot_list[[22]]
+```
+
+Below I nest the gapminder data by continent.
+
+```{r}
+gapminder_nested <- gapminder %>% 
+                      group_by(continent) %>% 
+                      nest()
+
+gapminder_nested
+```
+
+```{r}
+gapminder_nested %>% unnest()
+```
+
+
+```{r}
+gapminder_nested$data[[1]]
+```
+
+```{r}
+gapminder_nested$data[[2]]
+```
+
+
+To pull or extract from it by index
+
+```{r}
+gapminder_nested %>% 
+  pluck(1)
+```
+
+To pull or extract data from it by index
+
+```{r}
+gapminder_nested %>% 
+  pluck("data",1)
+```
+
+
+```{r}
+tibble(list_col = list(c(1, 5, 7),
+                       5,
+                       c(10, 10, 11))) %>% 
+    mutate(list_sum = map(.x = list_col, .f = sum))
+```
+
+since map returns a lits itself, so we will need to pull from the list
+
+```{r}
+tibble(list_col = list(c(1, 5, 7),
+                       5,
+                       c(10, 10, 11))) %>% 
+    mutate(list_sum = map(.x = list_col, .f = sum)) %>% 
+  pull(list_sum)
+```
+
+it could be better to result out a ve tor instead of list
+
+```{r}
+tibble(list_col = list(c(1, 5, 7),
+                       5,
+                       c(10, 10, 11))) %>% 
+  mutate(list_sum = map_dbl(.x = list_col, .f = sum))
+```
+
+How to get mean from column listed tibble data
+
+```{r}
+.x <- gapminder_nested %>% 
+        pluck("data", 1)
+```
+
+
+```{r}
+mean(.x$lifeExp)
+```
+Now applying mean function on all column listed tible data
+
+```{r}
+gapminder_nested %>% 
+  mutate(avg_lifeExp = map_dbl(data, ~{mean(.x$lifeExp)}))
+```
+
+### fitting a linear model for each contines / row
+
+```{r}
+gapminder_nested <- gapminder_nested %>% 
+  mutate(lm_obj = map(data, ~lm(lifeExp ~ pop + gdpPercap + year, data = .x)))
+
+gapminder_nested
+```
+
+#### checking linear model for first continent
+
+```{r}
+gapminder_nested %>% pluck("lm_obj", 1)
+```
+
+### Adding Predictions
+
+```{r}
+gapminder_nested <- gapminder_nested %>% 
+  mutate(pred = map2(.x = lm_obj, .y = data, function(.x,.y) predict(.x, .y)))
+
+gapminder_nested
+```
+
+can also be written as 
+
+```{r}
+gapminder_nested %>% 
+  mutate(pred = map2(lm_obj, data, function(.lm, .data) predict(.lm, .data)))
+
+```
+
+
+#### Calc. correlation pred reps. vs true resp.
+
+```{r}
+gapminder_nested <- gapminder_nested %>% 
+  mutate(cor = map2_dbl(pred, data, function(.pred, .data) cor(.pred, .data$lifeExp)))
+
+gapminder_nested
+```
+
+```{r}
+gapminder %>% 
+  group_by(continent) %>% 
+  nest %>% 
+  mutate(lm_obj = map(data, ~lm(lifeExp ~ pop + year + gdpPercap, data = .))) %>% 
+  mutate(lm_tidy = map(lm_obj, broom::tidy))
+```
+
+
+```{r}
+gapminder %>% 
+  group_by(continent) %>% 
+  nest %>% 
+  mutate(lm_obj = map(data, ~lm(lifeExp ~ pop + year + gdpPercap, data = .))) %>% 
+  mutate(lm_tidy = map(lm_obj, broom::tidy)) %>% 
+  ungroup() %>% 
+  transmute(continent, lm_tidy) %>% 
+  unnest(cols = c(lm_tidy))
+```
+
+
+### split function
+
+this will split the data frame on basisi of factors provided from the variable
+
+```{r}
+gapminder %>% split(gapminder$continent)
+```
+
+
+```{r}
+set.seed(23489)
+
+gapminder_list <- gapminder %>% 
+  split(gapminder$continent) %>% 
+  map(~sample_n(., 5))
+
+gapminder_list
+```
+
+
+### keep()
+
+function to limit/ filter data frame with conditions
+
+discar() is opposite of keep
+
+```{r}
+gapminder_list %>% 
+  keep(~{mean(.x$lifeExp) > 70})
+  
+```
+
+
+### Reduce()
+
+`reduce()` is designed to combine (reduces) all of the elements of a list into a single object by iteratively applying a binary function (a function that takes two inputs).
+
+```{r}
+reduce(c(1, 2, 3), sum)
+```
+
+### accumulate()
+
+also returns the intermediate values.
+
+```{r}
+accumulate(c(1, 2, 3), sum)
+```
+
+`Reduce` can be useful in combining columns by using left_join etc. or to do repeated `rbind()`
+
+```{r}
+gapminder_list %>% 
+  reduce(rbind)
+```
+
+
+
+### Logical statements for lists
+
+`every()`, `some()`
+
+For instance to ask whether every continent has average life expectancy greater than 70, you can use every()
+
+```{r}
+gapminder_list %>% every(~{mean(.x$life) > 70 })
+```
+
+
+```{r}
+gapminder_list %>% some(~{mean(.x$life) > 70})
+```
+
+
+### has_element()
+
+this is equivalent of %in%
+
+```{r}
+list(1, c(2, 5, 1), "a") %>% has_element("a")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
