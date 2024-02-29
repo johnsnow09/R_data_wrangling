@@ -1,0 +1,483 @@
+---
+title: "Tidy tuesday - Unemployment EDA"
+output: 
+  html_notebook:
+    highlight: tango
+    df_print: paged
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    number_sections: yes
+    toc_depth: 6
+  html_document:
+    toc: yes
+    toc_depth: '6'
+    df_print: paged
+---
+
+# Options & libs
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, results='hide', fig.keep='all', dpi = 300, fig.height = 6, fig.width = 6, out.width = "100%",attr.output='style="max-height: 300px;"')
+```
+
+
+
+```{css, echo=FALSE}
+# CSS for scrollable output & Header colors
+
+.scroll-100 {
+  max-height: 100px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+
+```
+
+
+```{r}
+# Turning scientific / Exponential numbers off
+
+options(scipen = 999)
+```
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(ggthemes)
+library(glue)
+library(scales)
+```
+
+view missing data
+
+```{r}
+library(naniar)
+```
+
+
+Creating & setting custom theme
+
+```{r}
+
+theme_viny_bright <- function(){
+  
+  library(ggthemes)
+  
+  ggthemes::theme_fivethirtyeight() %+replace%
+  
+  theme(
+    axis.title = element_text(size = 9),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 7),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    strip.background = element_blank(),
+    legend.background = element_rect(fill = NA),
+    legend.key = element_rect(fill = NA),
+    plot.title = element_text(hjust = 0.5,
+                              size = 16,
+                              face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, face = "bold"),
+    plot.caption = element_text(hjust = 1, size = 8)
+      )
+  
+  }
+
+theme_set(theme_viny_bright())
+```
+
+**sources:**
+
+Inspired from: https://www.youtube.com/watch?v=EHqFDXa-sH4&t=2105s
+
+# Loading data
+
+```{r}
+tt <- tt_load("2021-03-02")
+tt
+```
+
+# EDA
+
+```{r}
+youtube <- tt$youtube
+youtube
+```
+
+```{r}
+str(youtube)
+```
+
+```{r}
+summary(youtube)
+```
+
+```{r}
+youtube %>% 
+  mutate_if(is.character, as.factor) %>% 
+  summary()
+```
+
+missing value
+
+```{r}
+naniar::gg_miss_upset(data = youtube)
+```
+
+
+```{r}
+youtube %>% 
+  count(brand) %>% 
+  
+  mutate(brand = fct_reorder(brand, n)) %>% 
+  
+  ggplot(aes(x = n, y = brand)) +
+  geom_col()
+```
+
+
+```{r}
+youtube %>% 
+  
+  ggplot(aes(x = year, fill = brand)) +
+  geom_bar() +
+  facet_wrap(~brand) +
+  guides(x = guide_axis(n.dodge = 2))
+```
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  mutate(brand = fct_reorder(brand, view_count)) %>% 
+  
+  ggplot(aes(x = view_count, y = brand)) +
+  geom_boxplot() +
+  # geom_jitter(alpha = 0.3) +
+  scale_x_log10(labels = comma)
+```
+
+
+```{r}
+youtube %>% 
+  na.omit() %>%
+  mutate(brand = fct_reorder(brand, view_count)) %>% 
+   
+  ggplot(aes(x = view_count, y = brand)) +
+  geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+  geom_jitter(alpha = 0.3) +
+  scale_x_log10(labels = comma)
+```
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  mutate(brand = fct_reorder(brand, view_count)) %>% 
+  
+  ggplot(aes(x = view_count, y = brand, fill = funny)) +
+  geom_boxplot() +
+  # geom_jitter(alpha = 0.3) +
+  scale_x_log10(labels = comma)
+```
+
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  mutate(brand = fct_reorder(brand, view_count)) %>% 
+  
+  ggplot(aes(x = view_count, y = brand, fill = use_sex)) +
+  geom_boxplot() +
+  # geom_jitter(alpha = 0.3) +
+  scale_x_log10(labels = comma)
+```
+
+
+
+```{r}
+youtube %>% colnames()
+```
+
+
+```{r}
+youtube %>% 
+  pivot_longer(names_to = "ads_category", values_to = "true_false", 
+               cols = funny:use_sex)
+```
+
+### popular categories in brands
+
+```{r}
+youtube %>% 
+  pivot_longer(names_to = "ads_category", values_to = "true_false", 
+               cols = funny:use_sex) %>% 
+  filter(true_false == "TRUE") %>% 
+  
+  ggplot(aes(y = ads_category, x = view_count)) +
+  geom_col() +
+  facet_wrap(~brand)
+```
+
+```{r}
+library(tidytext)
+```
+
+#### log of view_count
+
+```{r}
+youtube %>% 
+  pivot_longer(names_to = "ads_category", values_to = "true_false", 
+               cols = funny:use_sex) %>% 
+  filter(true_false == "TRUE") %>% 
+  
+  ggplot(aes(y = fct_reorder(ads_category, view_count), 
+             x = view_count)) +
+  geom_col() +
+  facet_wrap(~brand) +
+  scale_x_log10()
+```
+
+#### reorder_within by view_count
+
+```{r fig.width=8, fig.height=10}
+youtube %>%
+  na.omit() %>% 
+  pivot_longer(names_to = "ads_category", values_to = "true_false", 
+               cols = funny:use_sex) %>% 
+  filter(true_false == "TRUE",
+         view_count > 10000) %>% 
+  group_by(brand, ads_category, view_count) %>% 
+  summarise(view_count = sum(view_count)) %>% 
+  ungroup() %>% 
+  mutate_if(is.character, factor) %>% 
+  mutate(ads_category = reorder_within(x = ads_category, by = view_count, within = brand)) %>% 
+  
+  ggplot(aes(y = ads_category, x = view_count)) +
+  geom_col() +
+  facet_wrap(~brand, scales = "free_y") +
+  scale_y_reordered() +
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(labels = unit_format(unit = "M", scale = 1e-6))
+```
+
+```{r}
+gathered_categories <- youtube %>% 
+  na.omit() %>% 
+  gather(ads_category, true_false, funny:use_sex)
+
+gathered_categories
+```
+
+#### view_count by pct
+
+```{r fig.width=8, fig.height=10}
+gathered_categories %>% 
+  filter(true_false == "TRUE",
+         ) %>% # view_count > 10000
+  
+  group_by(brand, ads_category) %>% 
+  summarise(view_count = sum(view_count)) %>% 
+  
+  group_by(brand) %>% 
+  mutate(pct = view_count / sum(view_count)) %>% 
+  
+  # mutate_if(is.character, factor) %>% 
+  mutate(ads_category = reorder_within(x = ads_category, by = pct, within = brand)) %>% 
+  
+  ggplot(aes(y = ads_category, x = view_count)) +
+  geom_col() +
+  facet_wrap(~brand, scales = "free_y") +
+  scale_y_reordered() +
+  
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(labels = unit_format(unit = "M", scale = 1e-6))
+```
+
+
+#### by pct
+
+wrapping axis text using str_wrap() from: https://stackoverflow.com/questions/21878974/wrap-long-axis-labels-via-labeller-label-wrap-in-ggplot2
+
+```{r fig.width=8, fig.height=10}
+gathered_categories %>% 
+  filter(true_false == "TRUE",
+         ) %>% # view_count > 10000
+  
+  group_by(brand, ads_category) %>% 
+  summarise(view_count = sum(view_count)) %>% 
+  
+  group_by(brand) %>% 
+  mutate(pct = view_count / sum(view_count),
+         ads_category = str_replace_all(ads_category,"_"," "),
+         ads_category = str_wrap(ads_category, width = 10)) %>% 
+  
+  # mutate_if(is.character, factor) %>% 
+  mutate(ads_category = reorder_within(x = ads_category, by = pct, within = brand)
+         ) %>%
+  
+  ggplot(aes(y = ads_category, x = pct)) +
+  geom_col() +
+  facet_wrap(~brand, scales = "free_y") +
+  scale_y_reordered() +
+  
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(labels = percent)
+```
+
+#### pct+view_count labels
+
+Adding view_count to axis text in above chart
+
+```{r fig.width=8, fig.height=10}
+gathered_categories %>% 
+  filter(true_false == "TRUE",
+         ) %>% # view_count > 10000
+  
+  group_by(brand, ads_category) %>% 
+  summarise(view_count = sum(view_count)) %>% 
+  
+  group_by(brand) %>% 
+  mutate(pct = view_count / sum(view_count),
+         ads_category = str_replace_all(ads_category,"_"," "),
+         ads_category = paste(ads_category,view_count),
+         ads_category = str_wrap(ads_category, width = 10)) %>% 
+  
+  # mutate_if(is.character, factor) %>% 
+  mutate(ads_category = reorder_within(x = ads_category, by = pct, within = brand)
+         ) %>%
+  
+  ggplot(aes(y = ads_category, x = pct)) +
+  geom_col() +
+  facet_wrap(~brand, scales = "free_y") +
+  scale_y_reordered() +
+  
+  theme(axis.text.x = element_text(angle = 90)) +
+  scale_x_continuous(labels = percent)
+```
+
+```{r}
+test_set = data.frame(x = c("label", "long label", "very,_very_long_label"), 
+                y = c(10, 15, 20))
+
+test_set$newx = str_wrap(test_set$x, width = 10)
+
+ggplot(test_set, aes(newx, y)) + 
+  xlab("") + ylab("Number of Participants") +
+  geom_bar(stat = "identity")
+```
+
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  gather(key = category, value = value, funny:use_sex) %>% 
+  
+  group_by(category,
+           year = 2 * (year %/% 2)) %>% 
+  summarise(pct = mean(value), n = n()) %>% 
+  
+  ggplot(aes(x = year, y = pct, col = category)) +
+  geom_path(size = .9) +
+  scale_y_continuous(labels = percent) +
+  facet_wrap(~category) +
+  theme(legend.position = "none")
+```
+
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  gather(key = category, value = value, funny:use_sex) %>% 
+  
+  group_by(category = str_to_title(str_replace_all(category, "_", " ")),
+           year = 2 * (year %/% 2)) %>% 
+  summarise(pct = mean(value), 
+            n = n()) %>% 
+  
+  ggplot(aes(x = year, y = pct, col = category)) +
+  geom_path(size = .9) +
+  scale_y_continuous(labels = percent) +
+  facet_wrap(~category) +
+  theme(legend.position = "none")
+```
+
+
+## Testing Statistically
+
+checking trend statistically related to year or not 
+
+```{r}
+glm(animals ~ year, family = "binomial", data = youtube) %>% 
+  summary()
+```
+
+Statistically above relation doesn't exist
+
+```{r}
+glm(celebrity ~ year, family = "binomial", data = youtube) %>% 
+  summary()
+```
+
+statistically year has relationship with celebrity 
+
+### broom loops
+
+Running loop on all using broom
+
+```{r}
+youtube %>% 
+  gather(category, value, funny:use_sex) %>% 
+  group_by(category) %>% 
+  nest()
+```
+
+
+```{r}
+youtube %>% 
+  gather(category, value, funny:use_sex) %>% 
+  group_by(category) %>% 
+  summarise(model = list(glm(value ~ year, family = "binomial") )) %>% 
+  mutate(td_modeldata = map(model, broom::tidy))
+```
+
+```{r}
+coefficients <-  youtube %>% 
+  # na.omit() %>% 
+  gather(category, value, funny:use_sex) %>% 
+  group_by(category) %>% 
+  summarise(model = list(glm(value ~ year, family = "binomial") )) %>% 
+  mutate(td_modeldata = map(model, broom::tidy)) %>% 
+  unnest(td_modeldata) %>% 
+  filter(term != "(Intercept)") %>% 
+  arrange(desc(estimate))
+
+coefficients
+```
+
+Categories with Only significant relationship with year 
+
+```{r}
+youtube %>% 
+  na.omit() %>% 
+  gather(key = category, value = value, funny:use_sex) %>% 
+  
+  group_by(category,
+           year = 2 * (year %/% 2)) %>% 
+  summarise(pct = mean(value), 
+            n = n()) %>% 
+  
+  inner_join(coefficients, by = "category") %>% 
+  mutate(category = str_to_title(str_replace_all(category, "_", " "))) %>% 
+  filter(p.value <= .01) %>% 
+  
+  ggplot(aes(x = year, y = pct, col = category)) +
+  geom_path(size = .9) +
+  scale_y_continuous(labels = percent) +
+  facet_wrap(~category) +
+  theme(legend.position = "none")
+```
+
+
+
+
