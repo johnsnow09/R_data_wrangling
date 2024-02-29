@@ -1,0 +1,330 @@
+---
+title: "For loop testing - Unemployment EDA"
+output: 
+  html_notebook:
+    highlight: tango
+    df_print: paged
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    number_sections: yes
+    toc_depth: 6
+  html_document:
+    toc: yes
+    toc_depth: '6'
+    df_print: paged
+---
+
+# Options & libs
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, results='hide', fig.keep='all', dpi = 300, out.width = "100%",attr.output='style="max-height: 300px;"')
+```
+
+CSS for scrollable output & Header colors
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 100px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+
+```
+
+Turning scientific / Exponential numbers off
+
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(ggthemes)
+library(glue)
+library(scales)
+```
+
+Creating & setting custom theme
+
+```{r}
+
+theme_viny_bright <- function(){
+  
+  library(ggthemes)
+  
+  ggthemes::theme_fivethirtyeight() %+replace%
+  
+  theme(
+    axis.title = element_text(size = 9),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 7),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    strip.background = element_blank(),
+    legend.background = element_rect(fill = NA),
+    legend.key = element_rect(fill = NA),
+    plot.title = element_text(hjust = 0.5,
+                              size = 16,
+                              face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, face = "bold"),
+    plot.caption = element_text(hjust = 1, size = 8)
+      )
+  
+  }
+
+theme_set(theme_viny_bright())
+```
+
+**sources:**
+
+Inspired from: <https://www.youtube.com/watch?v=gkZ5n8sfXns>
+
+# Loading data
+
+```{r}
+tt <- tt_load("2021-02-23")
+tt
+```
+
+# EDA
+
+```{r}
+employed <- tt$employed
+employed
+```
+
+```{r}
+str(employed)
+```
+
+```{r}
+summary(employed)
+```
+
+```{r}
+employed %>% 
+  mutate_if(is.character, as.factor) %>% 
+  summary()
+```
+
+looks like we have NA's in data
+
+## Missing Values
+
+```{r}
+sapply(employed, function(x) sum(is.na(x))) %>% 
+  as.data.frame()
+```
+
+```{r}
+library(naniar)
+```
+
+```{r}
+employed %>% 
+  naniar::gg_miss_upset()
+```
+
+## Cols Freq
+
+```{r}
+table(employed$industry) %>% 
+  as.data.frame() %>% 
+  arrange(desc(Freq)) %>% 
+  
+  ggplot(aes(Freq, fct_reorder(Var1, Freq), fill = Var1))  +
+  geom_col() +
+  theme(legend.position = "none")
+```
+
+```{r}
+top_freq_elements <- function(x){
+  
+  table(x) %>% 
+    as.data.frame() %>% 
+    arrange(desc(Freq)) %>% 
+    
+    ggplot(aes(Freq, fct_reorder(x, Freq), fill = x))  +
+    geom_col() +
+    theme(legend.position = "none")
+}
+```
+
+```{r}
+employed %>% 
+  select_if(is.character) %>% 
+  map(., .f = top_freq_elements)
+```
+
+```{r}
+employed %>% 
+  count(year)
+```
+
+```{r}
+employed %>% 
+  count(industry) %>% 
+  ggplot(aes(x = n, y = industry, fill = industry)) +
+  geom_col() +
+  theme(legend.position = "none")
+```
+
+```{r}
+for (var_selected in names(employed)){
+  employed %>% 
+    count(.data[[var_selected]]) %>% 
+    
+    ggplot(aes(x = n, y = .data[[var_selected]], fill = .data[[var_selected]])) +
+    geom_col() +
+    theme(legend.position = "none") %>% 
+    
+    print()
+  
+  # employed %>% 
+  # count(var_selected) %>% 
+  # ggplot(aes(x = n, y = var_selected, fill = var_selected)) +
+  # geom_col() +
+  # theme(legend.position = "none")
+}
+```
+
+
+
+from: onenote:///\\VINY-PC\Users\viny\Documents\OneNote%20Notebooks\R%20Learning%20&%20Notes\R%20Visualization.one#count()%20%20plot%20frequency%20of%20each%20variable%20in%20a%20function&section-id={C245D183-2D71-46D1-BCBE-2C1A047C220B}&page-id={FEB1F723-D8B8-4DB8-9BA3-ACD8DF96F454}&object-id={A46CDF35-1F4D-45E3-A63B-A89DC402039A}&10
+
+```{r}
+dummy_df <- data.frame(gender_vector = c("Male", "Female", "Female", "Male", "Male"),
+                          color_vector = c('blue', 'red', 'green', 'white', 'black'),
+                       num_vector = c(1,2,3,4,5)
+) 
+
+dummy_df
+```
+
+
+```{r}
+sel_char_cols_fn <- function(df){
+  df %>% 
+    select_if(is.character) %>%
+    head()
+}
+
+sel_char_cols_fn(dummy_df)
+```
+
+`select_if()` is working in above code
+
+```{r}
+count_char_cols_fn <- function(df,selected_var){
+  df %>% 
+    select_if(is.character) %>%
+    count(.data[[selected_var]])
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df %>%
+                        select_if(is.character)),
+           .f = count_char_cols_fn)
+```
+
+In above code we had to `select_if` in `map()` because it is applying `count()` var by var and if we would pass a unknown/numeric var to count function then it will not match
+
+```{r}
+dummy_df %>% 
+  # select(gender_vector) %>%
+  # as_data_frame() %>%
+  count(gender_vector)
+```
+
+```{r}
+dummy_df %>%
+  as_tibble() %>% 
+  select(gender_vector) %>%
+  # as_data_frame() %>%
+  count(gender_vector)
+```
+
+```{r}
+employed %>%
+  # as_tibble() %>% 
+  # select(industry) %>%
+  # as_data_frame() %>%
+  count(industry)
+```
+
+```{r}
+count_char_cols_fn2 <- function(df,selected_var){
+  df %>% 
+    if_else(class(.data[[selected_var]]) == "character",
+            count(.data[[selected_var]]),
+    )
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df),
+           .f = count_char_cols_fn2)
+```
+
+```{r}
+class(dummy_df$gender_vector)
+```
+
+from: https://stackoverflow.com/questions/66516774/how-to-write-if-else-condition-within-a-function-in-r-and-then-apply-on-all-vari
+
+```{r}
+count_char_cols_fn2 <- function(df,selected_var){
+    if_else(class(df[[selected_var]]) == "character",
+            count(df, .data[[selected_var]]),
+            )
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df),
+           .f = count_char_cols_fn2)
+```
+
+```{r}
+count_char_cols_fn2 <- function(df,selected_var){
+    if(class(df[[selected_var]]) == "character")
+            count(df, .data[[selected_var]])
+            
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df),
+           .f = count_char_cols_fn2)
+```
+
+
+
+```{r}
+count_char_cols_fn2 <- function(df,selected_var){
+    if(is.character(df[[selected_var]]) )
+            count(df, .data[[selected_var]])
+            
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df),
+           .f = count_char_cols_fn2)
+```
+
+
+```{r}
+count_char_cols_fn2 <- function(df,selected_var){
+    if(is.character(df[[selected_var]]) )
+      count(df, .data[[selected_var]]) %>%
+    
+    ggplot(aes(x = n, y = .data[[selected_var]], fill = .data[[selected_var]]))+
+    geom_col(show.legend = FALSE)
+}
+
+purrr::map(df = dummy_df, 
+           .x = names(dummy_df),
+           .f = count_char_cols_fn2)
+```
+
+

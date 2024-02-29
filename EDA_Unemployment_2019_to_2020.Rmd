@@ -1,0 +1,1372 @@
+---
+title: "Tidy tuesday - Unemployment EDA"
+output: 
+  html_notebook:
+    highlight: tango
+    df_print: paged
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    number_sections: yes
+    toc_depth: 6
+  html_document:
+    toc: yes
+    toc_depth: '6'
+    df_print: paged
+---
+
+# Options & libs
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300, out.width = "100%",attr.output='style="max-height: 300px;"')
+```
+
+CSS for scrollable output & Header colors
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 100px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+
+```
+
+Turning scientific / Exponential numbers off
+
+```{r}
+options(scipen = 999)
+```
+
+```{r}
+library(tidyverse)
+library(tidytuesdayR)
+library(ggthemes)
+library(glue)
+library(scales)
+```
+
+Creating & setting custom theme
+
+```{r}
+
+theme_viny_bright <- function(){
+  
+  library(ggthemes)
+  
+  ggthemes::theme_fivethirtyeight() %+replace%
+  
+  theme(
+    axis.title = element_text(size = 9),
+    axis.text = element_text(size = 8),
+    legend.text = element_text(size = 7),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    strip.background = element_blank(),
+    legend.background = element_rect(fill = NA),
+    legend.key = element_rect(fill = NA),
+    plot.title = element_text(hjust = 0.5,
+                              size = 16,
+                              face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, size = 10, face = "bold"),
+    plot.caption = element_text(hjust = 1, size = 8)
+      )
+  
+  }
+
+theme_set(theme_viny_bright())
+```
+
+**sources:**
+
+Inspired from: <https://www.youtube.com/watch?v=gkZ5n8sfXns>
+
+# Loading data
+
+```{r}
+tt <- tt_load("2021-02-23")
+tt
+```
+
+# EDA
+
+```{r}
+employed <- tt$employed
+employed
+```
+
+```{r}
+str(employed)
+```
+
+```{r}
+summary(employed)
+```
+
+```{r}
+employed %>% 
+  mutate_if(is.character, as.factor) %>% 
+  summary()
+```
+
+looks like we have NA's in data
+
+## Missing Values
+
+```{r}
+sapply(employed, function(x) sum(is.na(x))) %>% 
+  as.data.frame()
+```
+
+```{r}
+library(naniar)
+```
+
+```{r}
+employed %>% 
+  naniar::gg_miss_upset()
+```
+
+## Cols Freq
+
+```{r}
+table(employed$industry) %>% 
+  as.data.frame() %>% 
+  arrange(desc(Freq)) %>% 
+  
+  ggplot(aes(Freq, fct_reorder(Var1, Freq), fill = Var1))  +
+  geom_col() +
+  theme(legend.position = "none")
+```
+
+```{r}
+top_freq_elements <- function(x){
+  
+  table(x) %>% 
+    as.data.frame() %>% 
+    arrange(desc(Freq)) %>% 
+    
+    ggplot(aes(Freq, fct_reorder(x, Freq), fill = x))  +
+    geom_col() +
+    theme(legend.position = "none")
+}
+```
+
+```{r}
+employed %>% 
+  select_if(is.character) %>% 
+  map(., .f = top_freq_elements)
+```
+
+```{r}
+employed %>% 
+  count(year)
+```
+
+```{r}
+employed %>% 
+  count(industry) %>% 
+  ggplot(aes(x = n, y = industry, fill = industry)) +
+  geom_col() +
+  theme(legend.position = "none")
+```
+
+from: onenote:///\\VINY-PC\Users\viny\Documents\OneNote%20Notebooks\R%20Learning%20&%20Notes\R%20Visualization.one#count()%20%20plot%20frequency%20of%20each%20variable%20in%20a%20function&section-id={C245D183-2D71-46D1-BCBE-2C1A047C220B}&page-id={FEB1F723-D8B8-4DB8-9BA3-ACD8DF96F454}&object-id={A46CDF35-1F4D-45E3-A63B-A89DC402039A}&10
+
+```{r}
+var_freq_plot_fn <- function(df, selected_var){
+  df %>% 
+    # select_if(is.character) %>%
+    count(.data[[selected_var]]) %>%
+    # as_tibble() %>%
+    
+    ggplot(aes(x = n, y = .data[[selected_var]], fill = .data[[selected_var]])) +
+    geom_col() +
+    theme(legend.position = "none")
+}
+```
+
+```{r}
+purrr::map(.x = names(employed %>% select_if(is.character)), 
+           .f = var_freq_plot_fn, 
+           df = employed)
+```
+
+```{r}
+var_freq_plot_fn <- function(df){
+  purrr::map(df %>% 
+               select_if(is.character) %>% 
+               names, ~
+  df %>% 
+    count(.data[[.x]]) %>%
+    ggplot(aes(x = n, y = .data[[.x]], fill = .data[[.x]])) +
+    geom_col() +
+    theme(legend.position = "none"))
+}
+```
+
+```{r}
+var_freq_plot_fn(df = employed)
+```
+
+
+## sankey highcharter
+
+from: https://www.youtube.com/watch?v=k-IN6HBhgq4&t=142s
+
+```{r}
+library(highcharter)
+```
+
+```{r fig.width= 10,fig.height=12}
+highcharter::data_to_sankey(data = (employed %>% 
+                                      select(industry, major_occupation))) %>% 
+  hchart(., "sankey", name = "Industries to Occupation")
+```
+
+```{r fig.width= 10,fig.height=12}
+highcharter::data_to_sankey(data = (employed %>% 
+                                      select(major_occupation, minor_occupation))) %>% 
+  hchart(., "sankey", name = "Major occupation to minor occupation") %>% 
+  hc_add_theme(hc_theme_monokai()) %>% 
+  hc_title(text = "Industry to Occupation sankey plot")
+```
+
+## Employment Change
+
+```{r}
+employed %>% 
+  na.omit() %>% 
+  group_by(year) %>% 
+  summarise(employment_yrwise = sum(employ_n))
+```
+
+```{r}
+employed %>% 
+  na.omit() %>% 
+  group_by(year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0))
+```
+
+
+```{r}
+employed %>% 
+  na.omit() %>% 
+  group_by(year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0),
+         line_color = ifelse(employ_change >= 0, "blue","red")) %>% 
+  
+  ggplot(aes(x = year, y = employ_change, 
+             label = round(employ_change*100, digits = 2)
+             ,col = line_color
+             )) +
+  geom_line(group=1) +
+  geom_point() +
+  scale_y_continuous(labels = scales::percent_format(),
+                     limits = c(-0.08, 0.02) ) +
+  scale_color_identity() +
+  geom_text(nudge_y = .005) +
+  labs(title = "Yearly % Change in Employment")
+```
+
+from: https://stackoverflow.com/questions/44947806/how-can-i-fill-the-space-between-valuesgeom-line-and-an-intercept-with-ggplot2/44948631#44948631
+
+```{r}
+employment_yr_change <- employed %>% 
+  na.omit() %>% 
+  group_by(year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0))  
+  
+  
+employment_yr_change %>% 
+  ggplot(aes(x = year, y = employ_change, 
+             label = round(employ_change*100, digits = 2)
+             # ,col = line_color
+             )) +
+  # geom_line(group=1) +
+  # geom_point() +
+  geom_ribbon(aes(ymin=pmin(employment_yr_change$employ_change,0), ymax=0), fill="red", col="red", alpha=0.5) +
+  geom_ribbon(aes(ymin=0, ymax=pmax(employment_yr_change$employ_change,0)), fill="green", col="green", alpha=0.5) +
+  
+  scale_y_continuous(labels = scales::percent_format(),
+                     limits = c(-0.08, 0.02) ) +
+  scale_color_manual(values = c("blue","red")) +
+  geom_text(nudge_y = .005) +
+  labs(title = "Yearly % Change in Employment")
+```
+
+### distinct color line
+
+Coloring positive & negative line with separate colors
+
+from: https://stackoverflow.com/questions/66370513/how-to-color-geom-line-geom-point-properly-based-on-condition-if-less-than/66371746#66371746
+
+create function
+
+```{r}
+divide_line <- function(x, y, at = 0) {
+  df <- data.frame(x, ymin = at, ymax = y)
+  df$sign <- sign(df$ymax - df$ymin)
+  df <- df[order(df$x), ]
+  df$id <- with(rle(df$sign), rep.int(seq_along(values), lengths))
+  
+  crossover <- which(c(FALSE, diff(df$id) == 1))
+  crossover <- sort(c(crossover, crossover - 1))
+  splitter  <- rep(seq_len(length(crossover) / 2), each = 2)
+  crossover <- lapply(split(df[crossover, ], splitter), find_isect)
+  
+  df <- do.call(rbind, c(list(df), crossover))
+  df[order(df$x),]
+}
+find_isect <- function(df) {
+  list2env(df, envir = rlang::current_env())
+  dx <- x[1] - x[2]
+  dy <- ymin[1] - ymin[2]
+  t <- (-1 * (ymin[1] - ymax[1]) * dx) / (dx * (ymax[1] - ymax[2]) - dy * dx)
+  df$x <- x[1] + t * -dx
+  df$ymin <- df$ymax <- ymin[1] + t * -dy
+  return(df)
+}
+```
+
+create df
+
+```{r}
+df <- divide_line(employment_yr_change$year, employment_yr_change$employ_change, at = 0)
+
+df
+```
+
+create plot
+
+```{r}
+ggplot(df, aes(x, ymax, group = id, colour = as.factor(sign),
+               label = paste0(round(ymax*100, digits = 2),"%") )
+       )+
+  geom_line(size = .9) +
+  geom_point() +
+  scale_y_continuous(labels = percent_format(), 
+                     limits = c(-.08,.02)
+                     ) +
+  geom_text(nudge_y = .005) +
+  labs(title = "Yearly % Change in Employment")
+```
+
+
+```{r}
+ggplot(df, aes(x, ymax, group = id, colour = as.factor(sign),
+               label = paste0(round(ymax*100, digits = 2),"%") )
+       )+
+  geom_line(size = .9, aes(linetype = as.factor(id))) +
+  geom_point() +
+  scale_linetype_manual(values=c(2, 1, 3)) +
+  scale_y_continuous(labels = percent_format(), 
+                     limits = c(-.08,.02)
+                     ) +
+  geom_text(nudge_y = .005) +
+  labs(title = "Yearly % Change in Employment")
+```
+
+
+## Emp comparison charts
+
+balloon plot from: http://www.sthda.com/english/articles/32-r-graphics-essentials/129-visualizing-multivariate-categorical-data/
+
+https://rpkgs.datanovia.com/ggpubr/reference/ggballoonplot.html
+
+```{r}
+library(ggpubr)
+library(viridis)
+```
+
+```{r fig.height=10,fig.width=8}
+ggpubr::ggballoonplot(employed, x = "major_occupation", y = "industry", 
+                      size = "employ_n", fill = "employ_n") +
+  scale_fill_viridis_c(option = "C")
+```
+
+removing irrelevant categories from industries
+
+```{r fig.height=8,fig.width=8}
+ggpubr::ggballoonplot(employed %>% 
+                      filter(!industry %in% c(NA, "Men","Women","White","Black or African American", "Asian")) %>% 
+                        mutate(major_occupation = str_wrap(major_occupation, width = 25),
+                               industry = str_wrap(industry, width = 25)), 
+                      x = "major_occupation", y = "industry", 
+                      size = "employ_n", shape = 16) +
+  scale_fill_viridis_c(option = "C") +
+  labs(title = "Industry wise Employment Comparison")
+```
+
+```{r fig.height=8,fig.width=8}
+ggpubr::ggballoonplot(employed %>% 
+                      filter(!industry %in% c(NA, "Men","Women","White","Black or African American", "Asian")) %>%  
+                        mutate(industry = str_wrap(industry, width = 25)), 
+                      x = "year", y = "industry", 
+                      size = "employ_n", fill = "employ_n") +
+  scale_fill_viridis_c(option = "C") +
+  labs(title = "Industry Employment Comparison year wise")
+```
+
+
+```{r fig.height=12,fig.width=10}
+ggpubr::ggballoonplot(employed %>% 
+                      filter(!industry %in% c(NA, "Men","Women","White","Black or African American", "Asian")), 
+                      x = "major_occupation", y = "industry", 
+                      size = "employ_n", fill = "employ_n",  shape = 21, 
+                      facet.by = "year", ggtheme = theme_bw()) +
+  
+  scale_fill_viridis_c(option = "C") +
+  # gradient_fill(c("blue", "white", "red"))
+  
+  labs(title = "Yearly Industry & occupation wise employment comparison")
+```
+
+```{r}
+employed$minor_occupation %>% unique()
+```
+
+```{r fig.height=10,fig.width=8}
+ggpubr::ggballoonplot(employed, x = "major_occupation", y = "minor_occupation", 
+                      size = "employ_n", fill = "employ_n",  shape = 21, 
+                      facet.by = "year", ggtheme = theme_bw()) +
+  
+  scale_fill_viridis_c(option = "C") +
+  # gradient_fill(c("blue", "white", "red"))
+  
+  labs(title = "Yearly occupation wise employment comparison")
+```
+
+As we can see in above chart there are two Management, Manage-ment & needs data cleaning and re plotting
+
+```{r}
+employed <- employed %>% 
+  mutate(minor_occupation = str_replace(employed$minor_occupation, "Manage-ment", "Management")) 
+
+employed$minor_occupation %>% unique()
+```
+
+```{r fig.height=10,fig.width=8}
+ggpubr::ggballoonplot(employed, x = "major_occupation", y = "minor_occupation", 
+                      size = "employ_n", fill = "employ_n",  shape = 21, 
+                      facet.by = "year", ggtheme = theme_bw()) +
+  
+  scale_fill_viridis_c(option = "C") +
+  # gradient_fill(c("blue", "white", "red"))
+  
+  labs(title = "Yearly occupation wise employment comparison")
+```
+
+
+## Adding dimension
+
+```{r}
+employed <- employed %>% 
+  mutate(dimension = case_when(race_gender == "TOTAL" ~ "Total",
+                               race_gender %in% c("Men", "Women") ~ "Gender",
+                               TRUE ~ "Race")) 
+```
+
+```{r}
+employed %>% 
+  select(dimension) %>% 
+  table()
+```
+
+## Industry Emp Comparison
+
+```{r}
+employed_ind_cleaned <- employed %>% 
+  na.omit() %>% 
+  filter(dimension == "Total") %>% 
+  mutate(industry = fct_lump(industry, 11, w = employ_n),
+         industry = fct_reorder(industry, employ_n, sum))
+```
+
+### Industry Stack plot
+
+```{r}
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = industry)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "right", legend.direction = "vertical") +
+  labs(title = "Number of employs industry wise across the years") +
+  scale_fill_pander()
+```
+
+### Industry circular bar
+
+```{r}
+employed_ind_cleaned %>% 
+  filter(year == 2020) %>% 
+  # summarise(max(employ_n))
+  
+  ggplot(aes(x = industry, y = employ_n, fill = industry)) +
+  geom_bar(stat = "identity") +
+  # scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "none") +
+  ylim(0,25000000) +
+  coord_polar(start = 0) +
+  labs(title = "Number of employs industry wise in 2020")
+```
+
+```{r}
+employed_ind_cleaned %>% 
+  filter(year == 2020) %>% 
+  
+  ggplot(aes(x = fct_reorder(industry, employ_n, sum), y = employ_n, fill = industry)) +
+  geom_col() +
+  # scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6),
+  #                    limits = -50,20000000) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  ylim(-5000000,25000000) +
+  coord_polar(start = 240) +
+  labs(title = "Number of employs industry wise in 2020")
+```
+
+
+### Industry facet
+
+```{r fig.height=8, fig.width=8}
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = industry)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "none",
+        strip.text = element_text(size=8, face = "bold")) +
+  labs(title = "Number of employs industry wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ industry) +
+  scale_fill_pander()
+```
+
+
+```{r fig.height=8, fig.width=8}
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = industry)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "none",
+        strip.text = element_text(size=8, face = "bold")) +
+  labs(title = "Number of employs industry wise across the years",
+       subtitle = "Free scale comparison") +
+  facet_wrap(~ industry, scales = "free_y") +
+  scale_fill_pander() 
+```
+
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0)),
+         industry = str_wrap(industry, width = 20)) %>% 
+  
+  ggplot(aes(x = year, y = employ_change, col = industry)) +
+  geom_line(size = .9) +
+  scale_y_continuous(limits = c(-4000000,2000000),
+                     labels = unit_format(unit = "M", scale = 1e-6)) +
+  facet_wrap(~ industry) +
+  
+  labs(title = "Yearly Actual Change in employment count Industry wise") +
+  theme(legend.position = "none", panel.grid.major = element_blank(),
+        strip.text = element_text(size=8, face = "bold")) +
+  guides(x = guide_axis(n.dodge = 3))
+```
+
+
+### Industry % change
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise),
+         industry = str_wrap(industry, width = 20) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0) %>% round(digits = 4)) %>% 
+  
+  ggplot(aes(x = year, y = employ_change, fill = industry)) +
+  geom_col() +
+  scale_y_continuous(labels = percent_format()) +
+  facet_wrap(~ industry) +
+  
+  labs(title = "Yearly % Change in employment count Industry wise") +
+  theme(legend.position = "none",
+        strip.text = element_text(size=8, face = "bold"))
+```
+
+```{r}
+ggsave("emp_change_industry.jpg")
+```
+
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise),
+         industry = str_wrap(industry, width = 20) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0) %>% round(digits = 4)) %>% 
+  
+  ggplot(aes(x = year, y = employ_change, fill = industry)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format()) +
+  facet_wrap(~ industry) +
+  
+  labs(title = "Yearly % Change in employment count Industry wise") +
+  theme(legend.position = "none",
+        strip.text = element_text(size=8, face = "bold"))
+```
+
+
+```{r}
+ggsave("emp_change_industry_flipped.jpg")
+```
+
+
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise),
+         industry = str_wrap(industry, width = 20) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0) %>% round(digits = 4)) %>% 
+  
+  ggplot(aes(x = year, y = employ_change, col = industry)) +
+  geom_line(size=.9) +
+  scale_y_continuous(labels = percent_format()) +
+  facet_wrap(~ industry) +
+  
+  labs(title = "Yearly % Change in employment count Industry wise") +
+  theme(legend.position = "none", 
+        panel.grid.major = element_blank(),
+        strip.text = element_text(size=8, face = "bold"),
+        axis.text.x = element_text(angle = 90))
+```
+
+from: https://www.youtube.com/watch?v=_7J6BbDgqrA
+
+but is not working as expected
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise, default = 0))/
+           lag(employment_yrwise),
+         industry = str_wrap(industry, width = 20) ) %>% 
+  mutate(employ_change = replace(employ_change, is.na(employ_change), 0) %>% round(digits = 4)) %>% 
+  
+  ggplot() +
+  geom_col(aes(x = year, y = employ_change * 20000000, fill = employ_change > 0), alpha = 0.4) +
+  geom_line(aes(x = year, y = employment_yrwise), group =1) +
+  geom_point(aes(x = year, y = employment_yrwise, col = employ_change > 0)) +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  facet_wrap(~ industry) +
+  
+  labs(title = "Yearly % Change in employment count Industry wise") +
+  theme(legend.position = "none", panel.grid.major = element_blank(),
+        strip.text = element_text(size=8, face = "bold")) +
+  guides(x = guide_axis(n.dodge = 3))
+```
+
+by adding geom_text this worked
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise))/
+           lag(employment_yrwise) ) %>% 
+  na.omit() %>%
+  mutate(industry = str_wrap(industry, width = 20)) %>% 
+   
+  
+  ggplot() +
+  geom_col(aes(x = year, y = employ_change * 20000000, fill = employ_change > 0), alpha = 0.4) +
+  geom_line(aes(x = year, y = employment_yrwise), group =1) +
+  geom_point(aes(x = year, y = employment_yrwise, col = employ_change > 0)) +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  
+  facet_wrap(~ industry) +
+  labs(title = "Industry wise Yearly % Change & # in employment",
+       y = "# Employment (in Millions)") +
+  theme(legend.position = "none", panel.grid.major = element_blank(),
+        strip.text = element_text(size=8)) +
+  guides(x = guide_axis(n.dodge = 2)) +
+  
+  geom_text(aes(x = year, y = employ_change, label = paste0(round(employ_change*100,
+                                                                  digits=1),"%")
+                , col = employ_change > 0), 
+            nudge_y = -3000000, size = 2.2, angle = 45)
+```
+
+```{r}
+ggsave("actual_perc_change_in_emp.jpg")
+```
+
+adding geom_text to geom_line
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  group_by(industry, year) %>% 
+  summarise(employment_yrwise = sum(employ_n)) %>% 
+  mutate(employ_change = (employment_yrwise - lag(employment_yrwise))/
+           lag(employment_yrwise) ) %>% 
+  na.omit() %>%
+  mutate(industry = str_wrap(industry, width = 20)) %>% 
+  
+  ggplot() +
+  geom_col(aes(x = year, y = employ_change * 20000000, fill = employ_change > 0), alpha = 0.4) +
+  geom_line(aes(x = year, y = employment_yrwise), group =1) +
+  geom_point(aes(x = year, y = employment_yrwise, col = employ_change > 0)) +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  
+  facet_wrap(~ industry) +
+  labs(title = "Industry wise Yearly % Change & # in employment",
+       y = "# Employment (in Millions)") +
+  theme(legend.position = "none", panel.grid.major = element_blank(),
+        strip.text = element_text(size=8)) +
+  guides(x = guide_axis(n.dodge = 2)) +
+  
+  geom_text(aes(x = year, y = (employ_change * 20000000) - 3000000, 
+                label = paste0(round(employ_change*100,
+                                     digits=1),"%")
+                , col = employ_change > 0), 
+            size = 2, angle = 45) +
+  
+  geom_text(aes(x = year, y = employment_yrwise + 5000000, 
+                label = paste(round(employment_yrwise/1000000, digits=1), "M")
+                , col = employ_change > 0), 
+            size = 2, angle = 35)
+```
+
+
+```{r}
+ggsave("actual_perc_change_in_emp2.jpg")
+```
+
+## Occupation Emp Comparison
+
+### Major Occupation
+
+```{r fig.height=10, fig.width=10}
+
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = major_occupation)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  # theme(legend.position = "right", legend.direction = "vertical") +
+  labs(title = "Number of employs in Major occupation, Industry wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ industry)
+```
+
+```{r fig.height=8, fig.width=8}
+
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = major_occupation)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "none",
+        strip.text = element_text(size=7)) +
+  labs(title = "Number of employs in Major occupation, Industry wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ major_occupation)
+```
+
+### Minor occupation
+
+```{r fig.height=10, fig.width=10}
+
+employed_ind_cleaned %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = minor_occupation)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  # theme(legend.position = "right", legend.direction = "vertical") +
+  labs(title = "Number of employs in Minor occupation, Industry wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ industry)
+```
+
+
+```{r fig.height=10, fig.width=10}
+
+employed_ind_cleaned %>% 
+  mutate(minor_occupation = str_wrap(minor_occupation, width = 25)) %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = minor_occupation)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(legend.position = "none",
+        strip.text = element_text(size=8)) +
+  labs(title = "Number of employs in Minor occupation, Industry wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ minor_occupation)
+```
+
+### Major & Minor
+
+```{r fig.height=10, fig.width=10}
+
+employed_ind_cleaned %>% 
+  mutate(major_occupation = str_wrap(major_occupation, width = 30)) %>%
+  
+  ggplot(aes(x = year, y = employ_n, fill = minor_occupation)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(strip.text = element_text(size=8)) +
+  labs(title = "Number of employs in Minor occupation, Major occupation wise across the years",
+       subtitle = "Keeping scale fixed for industry level comparison") +
+  facet_wrap(~ major_occupation)
+```
+
+
+## Gender Industry Comparison
+
+```{r fig.height=8, fig.width=8}
+employed %>% 
+  na.omit() %>% 
+  filter(dimension == "Gender") %>% 
+  
+  ggplot(aes(x = year, y = employ_n, fill = race_gender)) +
+  geom_col() +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme(strip.text = element_text(size=7)) +
+  labs(title = "Number of employs industry wise across the years",
+       subtitle = "Colored by Gender") +
+  facet_wrap(~ industry) +
+  scale_fill_tableau()
+```
+
+```{r fig.height=8, fig.width=8}
+employed %>% 
+  na.omit() %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_lump(industry, 11, w = employ_n)) %>% 
+  group_by(year, industry, race_gender) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  ggplot(aes(x = year, y = employ_n, col = race_gender)) +
+  geom_line(size = 0.9) +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(size=7),
+        legend.position = "top") +
+  labs(title = "Number of employs industry wise based on Gender across the years") +
+  facet_wrap(~ industry) +
+  guides(x = guide_axis(n.dodge = 3)) +
+  scale_color_tableau()
+```
+
+```{r fig.height=8, fig.width=8}
+employed %>% 
+  na.omit() %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_lump(industry, 11, w = employ_n)) %>% 
+  group_by(year, industry, race_gender) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  ggplot(aes(x = year, y = employ_n, col = race_gender)) +
+  geom_line(size = 0.9) +
+  scale_y_log10(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(size=7),
+        legend.position = "top") +
+  labs(title = "Log of employs industry wise based on Gender across the years") +
+  facet_wrap(~ industry) +
+  guides(x = guide_axis(n.dodge = 3)) +
+  scale_color_tableau()
+```
+
+
+```{r fig.height=8, fig.width=8}
+employed %>% 
+  na.omit() %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_lump(industry, 15, w = employ_n)) %>% 
+  group_by(year, industry, race_gender) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  ggplot(aes(x = year, y = employ_n, col = race_gender)) +
+  geom_line(size = 0.9) +
+  scale_y_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        strip.text = element_text(size=7),
+        legend.position = "top") +
+  labs(title = "Number of employs industry wise based on Gender across the years",
+       subtitle = "(Free scale comparison)") +
+  facet_wrap(~ industry, scales = "free_y") +
+  guides(x = guide_axis(n.dodge = 3)) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE))
+```
+
+## 2019-2020 Emply change
+
+
+```{r}
+compare_2019_2020 <- employed %>% 
+  na.omit() %>% 
+  filter(year %in% c(2019, 2020)) %>% 
+  arrange(year) %>% 
+  group_by(industry, year, dimension, race_gender) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  group_by(industry, dimension, race_gender) %>% 
+  summarise(ratio = last(employ_n) / first(employ_n),
+            change = ratio -1,
+            employed_2019 = first(employ_n),
+            employ_2020 = last(employ_n)) %>%
+  mutate(industry = fct_reorder(industry, change, sum)) %>% 
+  ungroup()
+
+compare_2019_2020
+```
+
+
+```{r fig.height=6, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Total") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, fill = industry)) +
+  geom_col() +
+  theme(legend.position = "none") +
+  scale_x_continuous(labels = percent_format()) +
+  labs(title = "Industry %Change in emply. from 2019 to 2020",
+       y = "") 
+```
+
+```{r fig.height=6, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Total") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, fill = industry)) +
+  geom_col() +
+  theme(legend.position = "none") +
+  scale_x_continuous(labels = percent_format()) +
+  labs(title = "Industry %Change in emply. from 2019 to 2020",
+       y = "") +
+  geom_label(aes(label = employ_2020), size = 3, color = "white")
+```
+
+
+```{r fig.height=6, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, fill = race_gender)) +
+  geom_col() +
+  theme(legend.position = "right", legend.direction = "vertical") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_fill_tableau() +
+  labs(title = "Industry %Change in emply. from 2019 to 2020",
+       y = "")
+```
+
+
+```{r fig.height=8, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, fill = race_gender)) +
+  geom_col(position = "dodge") +
+  theme(legend.position = "right", legend.direction = "vertical") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_fill_tableau(guide = guide_legend(reverse = TRUE)) +
+  labs(title = "Industry %Change in emply. from 2019 to 2020",
+       y = "")
+```
+
+### lollypop plot
+
+#### Gender
+
+```{r fig.height=6, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, col = race_gender)) +
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0) +
+  geom_point(aes(size = employed_2019)) +
+  theme(legend.position = "right", legend.direction = "vertical") +
+  scale_x_continuous(labels = percent_format()) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  labs(title = "Industry %Change in emply. from 2019 to 2020",
+       y = "", col = "Gender", size = "2019 employ #")
+```
+
+
+
+```{r fig.height=8, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Gender") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format()) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  expand_limits(x = .2) +
+  
+  labs(title = str_wrap("% Change in Emply. for Industries", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Gender",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020",
+       col = "Gender" )
+```
+
+```{r}
+ggsave(filename = "Industry-gender-lolypop.jpg")
+```
+
+
+#### Race
+
+```{r fig.height=10, fig.width=8}
+
+compare_2019_2020 %>% 
+  filter(dimension == "Race") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(x = change, y = industry, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format()) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  
+  labs(title = str_wrap("% Change in Emply. for Industries", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Race",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020", 
+       col = "Race")
+```
+
+```{r}
+ggsave(filename = "Industry-race-lolypop.jpg")
+```
+
+### major occupation
+
+#### Gender
+
+```{r fig.height=6, fig.width=8}
+
+employed %>% 
+  na.omit() %>% 
+  filter(year %in% c(2019, 2020)) %>% 
+  arrange(year) %>% 
+  group_by(year, dimension, race_gender, major_occupation) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  group_by(major_occupation, dimension, race_gender) %>% 
+  summarise(ratio = last(employ_n) / first(employ_n),
+            change = ratio -1,
+            employed_2019 = first(employ_n),
+            employ_2020 = last(employ_n)) %>%
+  mutate(industry = fct_reorder(major_occupation, change, sum)) %>% 
+  ungroup() %>% 
+  
+  filter(dimension == "Gender") %>%
+  
+  mutate(major_occupation = fct_reorder(major_occupation, change)) %>% 
+  
+  ggplot(aes(x = change, y = major_occupation, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format(), limits = c(-.2,.1)) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  
+  labs(title = str_wrap("% Change in Emply. by Major Occupation", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Gender",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020", 
+       col = "Gender")
+```
+
+#### Race
+
+```{r fig.height=6, fig.width=8}
+
+employed %>% 
+  na.omit() %>% 
+  filter(year %in% c(2019, 2020)) %>% 
+  arrange(year) %>% 
+  group_by(year, dimension, race_gender, major_occupation) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  group_by(major_occupation, dimension, race_gender) %>% 
+  summarise(ratio = last(employ_n) / first(employ_n),
+            change = ratio -1,
+            employed_2019 = first(employ_n),
+            employ_2020 = last(employ_n)) %>%
+  mutate(industry = fct_reorder(major_occupation, change, sum)) %>% 
+  ungroup() %>% 
+  
+  filter(dimension == "Race") %>% 
+  
+  mutate(major_occupation = fct_reorder(major_occupation, change)) %>% 
+  
+  ggplot(aes(x = change, y = major_occupation, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format(), limits = c(-.2,.1)) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  
+  labs(title = str_wrap("% Change in Emply. by Major Occupation", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Race",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020", 
+       col = "Race")
+```
+
+
+### minor occupation
+
+#### Gender
+
+```{r fig.height=6, fig.width=8}
+
+employed %>% 
+  na.omit() %>% 
+  filter(year %in% c(2019, 2020)) %>% 
+  arrange(year) %>% 
+  group_by(year, dimension, race_gender, minor_occupation) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  group_by(minor_occupation, dimension, race_gender) %>% 
+  summarise(ratio = last(employ_n) / first(employ_n),
+            change = ratio -1,
+            employed_2019 = first(employ_n),
+            employ_2020 = last(employ_n)) %>%
+  mutate(industry = fct_reorder(minor_occupation, change, sum)) %>% 
+  ungroup() %>% 
+  
+  filter(dimension == "Gender") %>%
+  
+  mutate(minor_occupation = fct_reorder(minor_occupation, change)) %>% 
+  
+  ggplot(aes(x = change, y = minor_occupation, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format(), limits = c(-.2,.1)) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  
+  labs(title = str_wrap("% Change in Emply. by Minor Occupation", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Gender",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020", 
+       col = "Gender")
+```
+
+#### Race
+
+```{r fig.height=6, fig.width=8}
+
+employed %>% 
+  na.omit() %>% 
+  filter(year %in% c(2019, 2020)) %>% 
+  arrange(year) %>% 
+  group_by(year, dimension, race_gender, minor_occupation) %>% 
+  summarise(employ_n = sum(employ_n)) %>% 
+  
+  group_by(minor_occupation, dimension, race_gender) %>% 
+  summarise(ratio = last(employ_n) / first(employ_n),
+            change = ratio -1,
+            employed_2019 = first(employ_n),
+            employ_2020 = last(employ_n)) %>%
+  mutate(industry = fct_reorder(minor_occupation, change, sum)) %>% 
+  ungroup() %>% 
+  
+  filter(dimension == "Race") %>% 
+  
+  mutate(minor_occupation = fct_reorder(minor_occupation, change)) %>% 
+  
+  ggplot(aes(x = change, y = minor_occupation, col = race_gender)) +
+  
+  geom_errorbarh(aes(xmin = 0, xmax = change), height = 0,
+             position = position_dodge(width = .6)) +
+  geom_point(aes(size = employed_2019),
+             position = position_dodge(width = .6)) +
+  geom_vline(xintercept = 0, lty = 2, size = 1) +
+  
+  theme(legend.position = "top",
+        panel.grid.major = element_blank()) +
+  scale_x_continuous(labels = percent_format(), limits = c(-.2,.1)) +
+  scale_color_tableau(guide = guide_legend(reverse = TRUE)) +
+  scale_size_continuous(guide = FALSE) +
+  
+  labs(title = str_wrap("% Change in Emply. by Minor Occupation", 35),
+       subtitle = "(from: 2019 to 2020) \n \nSize is proportional to emply # in 2019 \n Lollypop Respresents Race",
+       caption = "Created by ViSa",
+       y = "", x = "Change in employment from 2019-2020", 
+       col = "Race")
+```
+
+
+
+### Industry wise % change
+
+#### Total
+
+```{r}
+library(ggrepel)
+```
+
+
+```{r}
+compare_2019_2020 %>% 
+  filter(dimension == "Total") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(employed_2019, change)) +
+  geom_point() +
+  geom_text_repel(aes(label = industry), size = 3) +
+  geom_hline(yintercept = 0, lty = 2, col = "red") +
+  
+  scale_x_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  scale_y_continuous(labels = percent_format()) +
+  
+  labs(title = "Overall % Emply Change for Industries",
+       subtitle = "(in: 2019 to 2020)")
+```
+
+#### Race
+
+
+```{r}
+compare_2019_2020 %>% 
+  filter(dimension == "Race",
+         race_gender == "Asian") %>% 
+  mutate(industry = fct_reorder(industry, change)) %>% 
+  
+  ggplot(aes(employed_2019, change)) +
+  geom_point() +
+  geom_text_repel(aes(label = industry), size = 3) +
+  geom_hline(yintercept = 0, lty = 2, col = "red") +
+  
+  scale_x_continuous(labels = unit_format(unit = "M", scale = 1e-6)) +
+  scale_y_continuous(labels = percent_format()) +
+  
+  labs(title = "Emply % Change for Asians in Industry",
+       subtitle = "(in: 2019 to 2020)")
+```
+
+## More Exploration
+
+```{r}
+employed %>% 
+  na.omit() %>% pull(race_gender) %>% 
+  table()
+  
+employed %>% 
+  na.omit() %>% pull(dimension) %>% 
+  table()
+```
+
+Seems like we dont have data for Gender among Races, so skiping the analysis of combination of both.
+
+```{r}
+employed
+```
+
+```{r}
+employed %>% 
+  pull(race_gender) %>% 
+  table()
+```
+
+
+## End of this EDA
+
+
+
+
