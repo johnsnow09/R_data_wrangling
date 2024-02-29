@@ -1,0 +1,167 @@
+---
+title: "coffe_ratings-TidyTuesday"
+output: 
+  html_notebook:
+    theme: spacelab
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: true
+    number_sections: true
+    toc_depth: 4
+  pdf_document:
+    toc: true
+    toc_depth: 4    
+---
+
+from: 
+https://www.youtube.com/watch?v=XoCgToAuzsU
+https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-07-07/readme.md
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Lib & Data
+
+```{r}
+# install.packages("tidyverse")
+
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+coffee_ratings <-  read_csv("https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-07-07/coffee_ratings.csv")
+
+head(coffee_ratings)
+```
+
+```{r}
+names(coffee_ratings)
+```
+
+```{r}
+str(coffee_ratings)
+```
+
+```{r}
+str(as.factor(coffee_ratings$country_of_origin))
+```
+
+
+```{r}
+summary(as.factor(coffee_ratings$country_of_origin))
+```
+
+```{r}
+coffee_ratings %>% glimpse()
+```
+
+```{r}
+coffee_ratings %>% 
+  select(owner, company, farm_name) %>% 
+  count(owner, sort = T)
+```
+
+```{r}
+coffee_ratings %>% 
+  select(owner, company, farm_name) %>% 
+  count(owner, company, sort = T)
+```
+
+
+```{r}
+coffee_ratings %>% 
+  select(owner, company, farm_name) %>% 
+  count(owner, farm_name)
+```
+
+
+```{r}
+coffee_ratings %>% 
+  count(farm_name, owner) %>% 
+  drop_na() %>% 
+  arrange(farm_name)
+```
+
+
+```{r}
+coffee_ratings %>% 
+  count(farm_name, owner) %>% 
+  drop_na() %>% 
+  arrange(farm_name) %>% 
+  count(farm_name, sort = T)
+```
+
+```{r}
+coffee_ratings %>% 
+  select(total_cup_points, country_of_origin, aroma:cupper_points) %>% 
+  gather(key = "key", value = "value", -total_cup_points, -country_of_origin)
+```
+
+
+```{r}
+coffee_ratings %>% 
+  select(total_cup_points, country_of_origin, aroma:cupper_points) %>% 
+  mutate(row_num = row_number()) # this will create row number
+```
+
+```{r}
+coffee_ratings %>% 
+  select(total_cup_points, country_of_origin, aroma:cupper_points) %>% 
+  mutate(row_num = row_number()) %>%  # this will create row number
+  gather(key = "key", value = "value", -total_cup_points, -country_of_origin, -row_num) 
+```
+
+
+```{r}
+coffee_ratings %>% 
+  select(total_cup_points, country_of_origin, aroma:cupper_points) %>% 
+  mutate(row_num = row_number()) %>%  # this will create row number
+  gather(key = "key", value = "value", -total_cup_points, -country_of_origin, -row_num) %>% 
+  group_by(row_num) %>% 
+  summarise(value = sum(value), total_cup_points = mean(total_cup_points))
+```
+
+```{r}
+coffee_ratings %>% 
+  select(country_of_origin, aroma:cupper_points) %>% 
+  filter(country_of_origin == "Ethiopia") %>% 
+  gather(key = "key", value = "value", -country_of_origin) %>% 
+  group_by(country_of_origin, key) %>% 
+  summarise(value = mean(value))
+```
+
+
+```{r}
+coffee_ratings %>% 
+  select(country_of_origin, aroma:cupper_points) %>% 
+  filter(country_of_origin == "Ethiopia") %>% 
+  gather(key = "key", value = "value", -country_of_origin) %>% 
+  group_by(country_of_origin, key) %>% 
+  summarise(value = mean(value)) %>% 
+  ungroup()
+```
+
+```{r}
+coffee_ratings %>% 
+  select(country_of_origin, aroma:cupper_points) %>% 
+  filter(country_of_origin == "Ethiopia") %>% 
+  gather(key = "key", value = "value", -country_of_origin) %>% 
+  group_by(country_of_origin, key) %>% 
+  summarise(value = mean(value)) %>% 
+  ungroup()
+```
+
+
+
+
+
+
+
+
