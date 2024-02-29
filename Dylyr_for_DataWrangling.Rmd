@@ -1,0 +1,268 @@
+---
+title: "Hands-on dplyr tutorial"
+output: 
+  html_notebook:
+    theme: spacelab
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: true
+    number_sections: true
+    toc_depth: 4
+  pdf_document:
+    toc: true
+    toc_depth: 4    
+---
+
+
+# Dplyr Practice for Data Wrangling
+
+from: https://www.youtube.com/watch?v=jWjqLW-u3hc
+
+
+## Loading necesary libs & data
+
+### Loading functionaity & dataset lib
+
+```{r}
+# install.packages("tidyverse")
+# install.packages("hflights")
+
+library(tidyverse)
+library(hflights)
+```
+
+
+```{r}
+data(hflights)
+```
+
+
+```{r}
+head(hflights)
+```
+
+```{r}
+str(hflights)
+```
+
+```{r}
+summary(hflights)
+```
+
+
+```{r}
+class(hflights)
+```
+## Creating tibble / local data frame
+
+```{r}
+flights <- as_tibble(hflights)
+class(flights)
+```
+
+
+I am skipping on all basic dply work that I am pretty comfortable with, so please refer to video if you want to practice every bit of dplyr
+
+
+```{r}
+filter(flights, Month == 1, DayofMonth == 1)
+```
+
+
+```{r}
+filter(flights, UniqueCarrier %in%  c("AA","AS"))
+```
+
+### Creating variables on fly without saving it with mutate()
+
+```{r}
+flights %>% 
+  select(Distance, AirTime) %>% 
+  mutate(Speed = Distance / AirTime * 60 )
+```
+
+
+Create a table grouped by Dest, & then take mean of Arrdelay for each group
+
+```{r}
+flights %>% 
+  # select(Dest, ArrDelay) %>% 
+  group_by(Dest) %>% 
+  summarise(ArrDelay_mean = mean(ArrDelay, na.rm = T))
+```
+
+
+#### summarise_each (also mutate_each also available)
+
+for each carrier calculate percentage of flights canceled or diverted
+```{r}
+
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  summarise_each(funs(mean), Cancelled, Diverted)
+  
+```
+
+
+find out the flight which gets affected the most in terms of canceled and diversion
+
+```{r}
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  summarise_each(funs(mean), Cancelled, Diverted) %>% 
+  mutate(problem_flight_percent = (Cancelled + Diverted)) %>% 
+  arrange(desc(problem_flight_percent))
+```
+
+
+for each carrier, calculate the minimum and maximum arrival and departure delays 
+
+```{r}
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  summarise_each(funs(min(., na.rm = T), max(., na.rm = T) ), matches("Delay", ignore.case = T) ) 
+```
+
+for each day of the year, count the total number of flights and sort in ascending order
+
+```{r}
+flights %>% 
+  group_by(Month, DayofMonth) %>% 
+  summarise(flights_count = n()) %>% 
+  arrange(desc(flights_count))
+```
+
+
+above same code can be rewritten with tally
+
+```{r}
+flights %>% 
+  group_by(Month, DayofMonth) %>% 
+  tally(sort = TRUE)
+  
+```
+
+
+for each destination, count total number of flights and number of distinct flights that flew there
+
+```{r}
+flights %>% 
+  group_by(Dest) %>% 
+  summarise(tot_flights = n(), tot_distinct_flights = n_distinct(TailNum, na.rm = TRUE))
+```
+
+
+for each destination show number of canceled and non canceled flights
+
+```{r}
+flights %>% 
+  group_by(Dest) %>% 
+  select(Dest, Cancelled) %>% 
+  table() %>% head()
+```
+
+
+### window functions
+
+#### longest departure delays
+
+for each carriers calculate which two days of the year they had their longest departure delays.
+smallest values is ranked as rank 1, so use desc to rank by largest values
+
+```{r}
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  select(Month, DayofMonth, DepDelay) %>% 
+  mutate(rank = rank(desc(DepDelay))) %>% 
+  filter(rank <= 2) %>% 
+  arrange(UniqueCarrier, desc(DepDelay))
+```
+
+
+above code can be written without creating rank variable in mutate()
+
+```{r}
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  select(Month, DayofMonth, DepDelay) %>% 
+  filter(rank(desc(DepDelay)) <= 2) %>% 
+  arrange(UniqueCarrier, desc(DepDelay))
+```
+
+
+this code can further be improved with `top_n()` function as top_n replaces the rank function
+
+```{r}
+flights %>% 
+  group_by(UniqueCarrier) %>% 
+  select(Month, DayofMonth, DepDelay) %>% 
+  top_n(n = 2, wt = DepDelay) %>% 
+  arrange(UniqueCarrier, desc(DepDelay))
+```
+
+
+#### change of number of flights
+
+for each month, calculate number of flights and changes from previous month
+
+```{r}
+flights %>% 
+  group_by(Month) %>% 
+  summarise(flight_count = n()) %>% 
+  mutate(mom_change = flight_count - lag(flight_count))
+```
+
+
+above code can be written using tally function as tally simply replaces n() within summarise()
+
+
+```{r}
+flights %>% 
+  group_by(Month) %>% 
+  tally() %>% 
+  mutate(mom_change = n - lag(n))
+```
+
+
+
+### other useful functions
+
+
+```{r}
+flights %>% 
+  sample_n(15)
+```
+
+
+```{r}
+flights %>% sample_frac(.05)
+```
+
+
+```{r}
+glimpse(flights)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
