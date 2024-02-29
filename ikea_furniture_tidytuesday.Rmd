@@ -1,0 +1,428 @@
+---
+title: "tidyduesday from David Robinson"
+output: 
+  html_notebook:
+    highlight: tango
+    df_print: paged
+    toc: true
+    toc_float: 
+      collapsed: true
+      smooth_scroll: false
+    number_sections: false
+    toc_depth: 6
+---
+
+
+# Ikea furniture
+
+## options & settings
+
+
+chunk options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300, out.width = "100%",attr.output='style="max-height: 300px;"')
+```
+
+
+CSS for scrollable output & Header colors 
+
+```{css, echo=FALSE}
+.scroll-100 {
+  max-height: 100px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+
+tbody tr:hover {
+  background: #dddddd;
+}
+
+
+h1, #TOC>ul>li {
+  color: #B64D3A;
+}
+
+h2, #TOC>ul>ul>li {
+  color: #000000;
+}
+
+h3, #TOC>ul>ul>ul>li {
+  color: #643cb2;
+}
+
+h4, #TOC>ul>ul>ul>ul>li {
+  color: #ae0058;
+}
+
+h5, #TOC>ul>ul>ul>ul>ul>li {
+  color: #ffa447;
+}
+
+h6, #TOC>ul>ul>ul>ul>ul>ul>li {
+  color: #DAE3D9;
+}
+
+```
+
+Turning scientific / Exponential numbers off
+
+```{r}
+options(scipen = 999)
+```
+
+
+## Source
+
+https://www.youtube.com/watch?v=lY0YLDZhT88&t=389s
+
+
+## Loading libs
+
+```{r}
+library(tidyverse)
+library(ggthemes)
+
+library(tidytuesdayR)
+```
+
+
+## Creating & setting custom theme
+
+```{r}
+
+theme_viny_bright <- function(){
+  
+  library(ggthemes)
+  
+  ggthemes::theme_fivethirtyeight() %+replace%
+  
+  theme(
+    axis.title = element_text(),
+    
+    axis.text = element_text(size = 13),
+    
+    legend.text = element_text(size = 10),
+    
+    panel.background = element_rect(fill = "white"),
+    
+    plot.background = element_rect(fill = "white"),
+    
+    strip.background = element_blank(),
+    
+    legend.background = element_rect(fill = NA),
+    
+    legend.key = element_rect(fill = NA),
+
+    plot.title = element_text(hjust = 0.5,
+                              size = 19,
+                              face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5, colour = "maroon")
+      )
+  
+  }
+
+theme_set(theme_viny_bright())
+```
+
+
+## Loading data
+
+```{r}
+tt <- tidytuesdayR::tt_load("2020-11-03")
+```
+
+```{r}
+tt$ikea %>% head()
+```
+
+
+```{r}
+ikea <- tt$ikea %>% 
+  select(-X1)
+
+str(ikea)
+```
+
+## Data Exploration 
+
+### Missing data
+
+```{r}
+colSums(is.na(ikea))
+```
+
+### Missing data "?"
+
+```{r}
+
+element_freq <- function(x){
+  
+  return(table(x)[names(table(x)) == "?"])
+
+  }
+  
+```
+
+
+```{r}
+ikea %>% map(., .f= element_freq) 
+```
+
+### Missing data "-"
+
+```{r}
+
+element_freq <- function(x){
+  
+  return(table(x)[names(table(x)) == "-"])
+
+  }
+  
+```
+
+
+```{r}
+ikea %>% map(., .f= element_freq) 
+```
+
+### Distinct counts in each col
+
+```{r}
+ikea %>% summarise_all(n_distinct)
+```
+
+```{r}
+ikea %>% 
+  count(category, sort = TRUE)
+```
+
+### count of items category wise
+
+```{r}
+ikea %>% 
+  count(category) %>% 
+  mutate(category = fct_reorder(category, n)) %>% 
+  ggplot(aes(x = category, y = n)) +
+  geom_col() +
+  coord_flip()
+```
+
+### Price variation in each category
+
+```{r}
+ikea %>% 
+  mutate(category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  coord_flip()
+```
+
+```{r}
+ikea %>% 
+  mutate(category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  coord_flip() +
+  scale_y_log10()
+```
+
+```{r fig.width=8, fig.height=8 }
+ikea %>% 
+  mutate(category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  geom_jitter(width = 0, height = .1) +
+  coord_flip() +
+  scale_y_log10()
+```
+
+
+### Adding category count
+
+```{r fig.width=8, fig.height=8 }
+library(glue)
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  geom_jitter(width = 0, height = .1) +
+  coord_flip() +
+  scale_y_log10()
+```
+
+
+```{r fig.width=8, fig.height=8 }
+library(glue)
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  # geom_jitter(width = 0, height = .1) +
+  coord_flip() +
+  scale_y_log10()
+```
+
+
+
+```{r fig.width=8, fig.height=8 }
+library(ggridges)
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(y = category, x = price)) +
+  geom_density_ridges() +
+  # geom_jitter(width = 0, height = .1) +
+  # coord_flip() +
+  scale_x_log10()
+```
+
+
+```{r fig.width=8, fig.height=8 }
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(y = category, x = price)) +
+  geom_density_ridges()
+  # geom_jitter(width = 0, height = .1) +
+  # coord_flip() +
+  # scale_x_log10()
+```
+
+
+```{r fig.width=8, fig.height=8 }
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(y = category, x = price, fill = other_colors, alpha = .25)) +
+  geom_density_ridges() +
+  # geom_jitter(width = 0, height = .1) +
+  # coord_flip() +
+  scale_x_log10()
+```
+
+
+```{r fig.width=8, fig.height=8 }
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price, fill = other_colors)) +
+  geom_boxplot() +
+  # geom_jitter(width = 0, height = .1) +
+  coord_flip() +
+  scale_y_log10()
+```
+
+```{r fig.width=8, fig.height=8 }
+
+ikea %>%
+  add_count(category, name = "category_total") %>% 
+  mutate(
+    category = glue("{category } ({category_total})"),
+    category = fct_reorder(category, price)) %>% 
+  ggplot(aes(x = category, y = price)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, height = .1, aes(color = other_colors), alpha = 0.5) +
+  coord_flip() +
+  scale_y_log10()
+```
+
+### popular names by catgories
+
+```{r}
+ikea %>% 
+  mutate(name = fct_lump(name, 20)) %>% 
+  count(name, category, sort = TRUE) %>% 
+  mutate(name = fct_reorder(name, n)) %>% 
+  ggplot(aes(x = n, y = name, fill = category)) +
+  geom_col()
+```
+
+
+```{r}
+ikea %>% 
+  mutate(name = fct_lump(name, 20)) %>% 
+  filter(name != "Other") %>% 
+  count(name, category, sort = TRUE) %>% 
+  mutate(name = fct_reorder(name, n)) %>% 
+  ggplot(aes(x = n, y = name, fill = category)) +
+  geom_col()
+```
+
+
+```{r}
+ikea %>% 
+  mutate(name = fct_lump(name, 21)) %>% 
+  filter(name != "Other") %>% 
+  count(name, category, sort = TRUE) %>% 
+  mutate(name = fct_reorder(name, n, sum)) %>% 
+  ggplot(aes(x = n, y = name, fill = category)) +
+  geom_col() +
+  theme_light()
+```
+
+
+```{r}
+# setting legend order
+
+ikea %>% 
+  mutate(name = fct_lump(name, 21)) %>% 
+  filter(name != "Other") %>% 
+  count(name, category, sort = TRUE) %>% 
+  mutate(name = fct_reorder(name, n, sum)) %>% 
+  ggplot(aes(x = n, y = name, fill = category)) +
+  geom_col() +
+  theme_light() +
+  scale_fill_discrete(guide = guide_legend(reverse = TRUE))
+```
+
+
+```{r}
+# categories on y-axis & 
+
+ikea %>% 
+  mutate(name = fct_lump(name, 20)) %>% 
+  filter(name != "Other") %>%
+  count(name, category, sort = TRUE) %>% 
+  mutate(category = fct_reorder(category, n, sum)) %>% 
+  ggplot(aes(x = n, y = category, fill = name)) +
+  geom_col() +
+  theme_light() +
+  scale_fill_discrete(guide = guide_legend(reverse = TRUE))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
