@@ -1,0 +1,2155 @@
+---
+title: "UN Votes"
+output:
+  html_notebook:
+    highlight: tango
+    df_print: paged
+    toc: yes
+    toc_float:
+      collapsed: yes
+      smooth_scroll: yes
+    number_sections: yes
+    toc_depth: 6
+  html_document:
+    toc: yes
+    toc_depth: '6'
+    df_print: paged
+---
+
+# UN Votes Analysis
+
+## options & settings
+
+chunk options
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, dpi = 300, out.width = "100%",attr.output='style="max-height: 300px;"')
+```
+
+CSS for scrollable output & Header colors
+
+```{css, echo=FALSE, include = FALSE}
+.scroll-100 {
+  max-height: 100px;
+  overflow-y: auto;
+  background-color: inherit;
+}
+
+tbody tr:hover {
+  background: #dddddd;
+}
+
+
+h1, #TOC>ul>li {
+  color: #B64D3A;
+}
+
+h2, #TOC>ul>ul>li {
+  color: #000000;
+}
+
+h3, #TOC>ul>ul>ul>li {
+  color: #643cb2;
+}
+
+h4, #TOC>ul>ul>ul>ul>li {
+  color: #ae0058;
+}
+
+h5, #TOC>ul>ul>ul>ul>ul>li {
+  color: #ffa447;
+}
+
+h6, #TOC>ul>ul>ul>ul>ul>ul>li {
+  color: #DAE3D9;
+}
+
+
+```
+
+Turning scientific / Exponential numbers off
+
+```{r}
+options(scipen = 999)
+```
+
+```{r echo=FALSE}
+options(readr.show_progress = FALSE)
+```
+
+## Source
+
+David Robinson tidytuesday: <https://www.youtube.com/watch?v=2RadZrpzTaA>
+
+## Loading libs
+
+```{r}
+library(tidyverse)
+library(ggthemes)
+library(tidytuesdayR)
+library(tidytext)
+library(scales)
+library(lubridate)
+library(glue)
+library(ggtext)
+library(widyr)
+library(countrycode)
+library(factoextra)
+library(ggstream)
+library(wesanderson)  # color pallete
+```
+
+## Creating & setting custom theme
+
+```{r}
+
+theme_viny_bright <- function(){
+  
+  library(ggthemes)
+  
+  ggthemes::theme_fivethirtyeight() %+replace%
+  
+  theme(
+    axis.title = element_text(size = 10, face = "bold"),
+    axis.text = element_text(size = 9),
+    legend.text = element_text(size = 9),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    strip.background = element_blank(),
+    legend.background = element_rect(fill = NA),
+    legend.key = element_rect(fill = NA),
+    legend.position = "right",
+    legend.direction = "vertical",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold",
+                              family = "serif", margin=margin(0,0,15,0)),
+    plot.subtitle = element_text(hjust = 0.5,face = "plain", family = "serif", size = 9),
+    plot.caption = element_text(hjust = 1,  size = 8)
+      )
+  }
+
+theme_set(theme_viny_bright())
+```
+
+## Load Data
+
+```{r}
+tt <- tt_load("2021-03-23")
+
+tt
+```
+
+```{r}
+unvotes <- tt$unvotes
+
+head(unvotes)
+```
+
+```{r}
+unvotes %>% 
+  mutate_all(as.factor) %>% 
+  summary()
+```
+
+```{r}
+unvotes %>% 
+  mutate_all(as.factor) %>% 
+  group_by(country, vote) %>% 
+  summarise(count = n()) %>%
+  mutate(pct = count/sum(count)) %>% 
+  ungroup() %>%
+  filter(country == "India")
+```
+
+### top bottom countries by vote type
+
+```{r}
+unvotes %>% 
+  mutate_all(as.factor) %>% 
+  group_by(country, vote) %>% 
+  summarise(count = n(), .groups = "drop_last") %>%
+  mutate(pct = count/sum(count)) %>% 
+  
+  group_by(vote) %>%
+  slice_max(pct, n = 10) %>% 
+  mutate(country = str_wrap(country, width = 20)) %>% 
+  
+  ggplot(aes(x = pct, y = tidytext::reorder_within(country, by = pct, 
+                                            within = vote))) +
+  geom_col() +
+  facet_wrap(~vote, scales = "free_y") +
+  scale_y_reordered() +
+  scale_x_continuous(labels = percent) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "top 10 countries by vote type",
+       y = "", x = "percentage of vote type",
+       caption = "created by ViSa")
+```
+
+```{r fig.height=6, fig.width=8}
+unvotes %>% 
+  mutate_all(as.factor) %>% 
+  group_by(country, vote) %>% 
+  summarise(count = n(), .groups = "drop_last") %>%
+  mutate(pct = count/sum(count)) %>% 
+  
+  group_by(vote) %>%
+  arrange(desc(pct)) %>% 
+  slice(c(1:10, (n() - 10):n() )) %>%  # this selects both top & bottom 10
+  mutate(country = str_wrap(country, width = 20)) %>% 
+  
+  ggplot(aes(x = pct, y = tidytext::reorder_within(country, by = pct, 
+                                            within = vote))) +
+  geom_point() +
+  facet_wrap(~vote, scales = "free_y") +
+  scale_y_reordered() +
+  scale_x_continuous(labels = percent) +
+  theme(axis.text.x = element_text(angle = 90)) +
+  labs(title = "top 10 & bottom 10 countries by each vote type",
+       y = "", x = "percentage of vote type",
+       caption = "created by ViSa")
+```
+
+```{r fig.height=6, fig.width=8}
+unvotes %>% 
+  mutate_all(as.factor) %>% 
+  group_by(country) %>% 
+  mutate(total_votes  = n()) %>%
+  
+  group_by(country, vote) %>% 
+  summarise(count = n(), .groups = "drop_last",
+            total_votes = first(total_votes)) %>%
+  mutate(pct = count/sum(count)) %>% 
+  
+  group_by(vote) %>%
+  arrange(desc(pct)) %>% 
+  slice(c(1:10, (n() - 10):n() )) %>%  # this selects both top & bottom 10
+  mutate(country = str_wrap(country, width = 20)) %>% 
+  
+  ggplot(aes(x = pct, 
+             y = tidytext::reorder_within(country, by = pct, within = vote))) +
+  geom_point(aes(size = total_votes)) +
+  facet_wrap(~vote, scales = "free_y") +
+  scale_y_reordered() +
+  scale_x_continuous(labels = percent) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  labs(title = "top 10 & bottom 10 countries by each vote type",
+       y = "", x = "percentage of vote type",
+       caption = "created by ViSa")
+```
+
+```{r}
+unvotes <- unvotes %>% 
+  mutate(vote_number = match(vote, c("no","abstain","yes")) -2)
+
+unvotes
+```
+
+saving object for flexdasbhoard
+
+```{r}
+flex_topbottom <- unvotes %>% 
+  mutate_all(as.factor) %>% 
+  group_by(country) %>% 
+  mutate(total_votes  = n()) %>%
+  
+  group_by(country, vote) %>% 
+  summarise(count = n(), .groups = "drop_last",
+            total_votes = first(total_votes)) %>%
+  mutate(pct = count/sum(count),
+         country = str_wrap(country, width = 20)) %>% 
+  
+  group_by(vote) %>%
+  arrange(desc(pct)) 
+  
+flex_topbottom %>%   
+  slice(c(1:10, (n() - 10):n() )) %>%  # this selects both top & bottom 10
+  
+  ggplot(aes(x = pct, 
+             y = tidytext::reorder_within(country, by = pct, within = vote))) +
+  geom_point(aes(size = total_votes)) +
+  facet_wrap(~vote, scales = "free_y") +
+  scale_y_reordered() +
+  scale_x_continuous(labels = percent) +
+  theme(axis.text.x = element_text(angle = 90), legend.position = "none") +
+  labs(title = "top 10 & bottom 10 countries by each vote type",
+       y = "", x = "percentage of vote type",
+       caption = "created by ViSa")
+```
+
+```{r}
+unvotes %>% 
+  count(vote, vote_number)
+```
+
+```{r}
+by_country <- unvotes %>% 
+  group_by(country) %>% 
+  summarise(n_votes = n(),
+            n_yes = sum(vote == "yes"),
+            pct_yes = n_yes / n_votes) %>% 
+  arrange(desc(pct_yes)) %>% 
+  filter(n_votes >= 100)
+
+by_country
+```
+
+### fn summarize_votes()
+
+```{r}
+summarize_votes <- function(df, min_votes = 10){
+  df %>%  
+  summarise(n_votes = n(),
+            n_yes = sum(vote == "yes"),
+            pct_yes = n_yes / n_votes) %>% 
+  arrange(desc(pct_yes)) %>% 
+  filter(n_votes >= min_votes)
+}
+```
+
+```{r}
+by_country <- unvotes %>% 
+  group_by(country) %>% 
+  summarize_votes()
+
+by_country
+```
+
+### top bottom for yes votes
+
+```{r}
+by_country %>%
+  mutate(country = fct_reorder(country, pct_yes)) %>% 
+  slice(c(1:10, (n() - 10):n() )) %>% 
+  
+  ggplot(aes(x = pct_yes, y = country)) +
+  geom_point(aes(size = n_votes)) +
+  scale_x_continuous(labels = percent) +
+  labs(title = "Top & bottom countries with % of yes votes in UN",
+       caption = "created by ViSa")
+```
+
+### Least yes votes
+
+```{r}
+by_country %>%
+  mutate(country = fct_reorder(country, pct_yes)) %>% 
+  slice_min(pct_yes, n = 20) %>% 
+  
+  ggplot(aes(x = pct_yes, y = country)) +
+  geom_point(aes(size = n_votes)) +
+  scale_x_continuous(labels = percent) +
+  labs(title = "Countries with least % of yes votes in UN",
+       y = "",
+       caption = "created by ViSa")
+```
+
+### roll_calls df
+
+```{r}
+tt$roll_calls
+```
+
+```{r}
+unvotes <- unvotes %>% 
+  left_join(tt$roll_calls %>% 
+              select(rcid, date, amend), by = "rcid") 
+
+unvotes
+```
+
+```{r}
+by_year <- unvotes %>% 
+  group_by(year = year(date)) %>% 
+  summarize_votes()
+
+by_year
+```
+
+```{r}
+by_year %>% 
+  ggplot(aes(x = year, y = pct_yes)) +
+  geom_line( size = .9) +
+  scale_y_continuous(labels = percent) +
+  expand_limits(y = 0)
+```
+
+```{r}
+by_country_year <- unvotes %>% 
+  group_by(year = year(date), 
+           country) %>% 
+  summarize_votes()
+
+by_country_year
+```
+
+```{r}
+by_country_year %>% 
+  filter(country %in% c("United States", "Canada", "Mali")) %>% 
+  mutate(country = fct_reorder(country, pct_yes)) %>% 
+  
+  ggplot(aes(x = year, y = pct_yes, col = country)) +
+  geom_line(size = 0.9) +
+  scale_y_continuous(labels = percent) +
+  scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+  expand_limits(y = 0) +
+  labs(title = "% yes by countries over the years",
+       caption = "created by ViSa")
+```
+
+```{r}
+country_yes_line <- function(filter_list = c("India")){
+    by_country_year %>% 
+    filter(country %in% filter_list) %>% 
+    mutate(country = fct_reorder(country, pct_yes)) %>% 
+    
+    ggplot(aes(x = year, y = pct_yes, col = country)) +
+    geom_line(size = 0.9) +
+    scale_y_continuous(labels = percent) +
+    # scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+    expand_limits(y = 0)+
+    labs(title = "% yes votes by countries over the years",
+       caption = "created by ViSa")
+}
+```
+
+```{r}
+country_yes_line(filter_list = c("India", "Russia", "United States", "China"))
+```
+
+```{r}
+country_yes_line_facet <- function(filter_list = c("India")){
+    by_country_year %>% 
+    filter(country %in% filter_list) %>% 
+    mutate(country = fct_reorder(country, pct_yes)) %>% 
+    
+    ggplot(aes(x = year, y = pct_yes, col = country)) +
+    geom_line(size = 0.9, show.legend = FALSE) +
+    scale_y_continuous(labels = percent) +
+    # scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+    expand_limits(y = 0)+
+    facet_wrap(~country) +
+    labs(title = "% yes by countries over the years",
+       caption = "created by ViSa")
+}
+```
+
+```{r}
+country_yes_line_facet(c("India","Russia","China","France","Pakistan","Sweden"))
+```
+
+```{r}
+country_yes_line_facet(c("India","Russia","France","Germany","United Kingdom","Turkey"))
+```
+
+From above charts lot of countries is close to 75% yes_vote now and this happened from 1990's. Some European & Western countries goes lower than 75% which are mostly NATO allies.
+
+### Overall Countries avg
+
+```{r}
+by_country_year <- unvotes %>% 
+  bind_rows(unvotes %>% mutate(country = "Overall")) %>% 
+  
+  group_by(year = year(date),
+           country) %>% 
+  summarize_votes()
+  
+by_country_year %>%  
+  filter(country == "Overall")
+```
+
+```{r}
+country_yes_line <- function(filter_list = c("India")){
+    by_country_year %>% 
+    filter(country %in% filter_list) %>% 
+    mutate(country = fct_reorder(country, pct_yes)) %>% 
+    
+    ggplot(aes(x = year, y = pct_yes)) +
+    geom_line(data = by_year, lty = 1, size = 1.8, alpha = 0.3) +
+    geom_line(aes(col = country), size = 0.9) +
+    scale_y_continuous(labels = percent) +
+  # scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+    expand_limits(y = 0)+
+    labs(title = "% yes by countries over the years with world average",
+       caption = "created by ViSa") +
+    theme(legend.position = "top",
+          legend.direction = "horizontal")
+}
+```
+
+```{r}
+country_yes_line(filter_list = c("India", "Russia", "United States", "China"))
+```
+
+```{r}
+country_list <- unvotes %>% 
+  distinct(country) %>% 
+  pull()
+
+country_list
+```
+
+## World Map
+
+```{r}
+map_data("world") %>%
+  filter(region != "Antarctica") %>% 
+  
+  ggplot(aes(x = long, y = lat, group = group)) +
+  geom_polygon() +
+  theme_map()
+```
+
+### fn summarize_votes()
+
+```{r}
+summarize_votes <- function(df, min_votes = 10){
+  df %>%  
+  summarise(n_votes = n(),
+            n_yes = sum(vote == "yes"),
+            pct_yes = n_yes / n_votes,
+            .groups = "drop") %>% 
+  arrange(desc(pct_yes)) %>% 
+  filter(n_votes >= min_votes)
+}
+```
+
+```{r}
+by_country <- unvotes %>% 
+  group_by(country, country_code) %>% 
+  summarize_votes()
+
+by_country
+```
+
+```{r}
+by_country_year <- unvotes %>% 
+  group_by(year = year(date), 
+           country,
+           country_code) %>% 
+  summarize_votes()
+
+by_country_year
+```
+
+### world map
+
+```{r}
+library(fuzzyjoin)
+```
+
+```{r}
+world_data <- map_data("world") %>% 
+  filter(region != "Antarctica") %>%
+  as_tibble() %>% 
+  fuzzyjoin::regex_left_join(maps::iso3166 %>% 
+                               select(mapname, country_code = a2),
+                             c(region = "mapname"))
+
+world_data
+```
+
+```{r}
+world_data %>%
+  left_join(by_country, by = "country_code") %>% 
+  
+  ggplot(aes(x = long, y = lat, group = group, fill = pct_yes)) +
+  geom_polygon() +
+  theme_map() +
+  scale_fill_gradient2(low = "red", high = "blue", 
+                       midpoint = .6, labels = percent) +
+  labs(fill = "% yes vote",
+       caption = "created by ViSa")
+```
+
+## by continet
+
+```{r}
+library(countrycode)
+```
+
+```{r}
+unvotes %>% 
+  mutate(continent = countrycode(country_code, "iso2c", "continent")) %>% 
+  group_by(continent, year = year(date)) %>% 
+  summarize_votes() %>% 
+  filter(!is.na(continent)) %>% 
+  
+  mutate(country = fct_reorder(continent, pct_yes)) %>% 
+  
+  ggplot(aes(x = year, y = pct_yes)) +
+  geom_line(data = by_year, lty = 1, size = 1.8, alpha = 0.3) +
+  geom_line(aes(col = continent), size = 0.9) +
+  scale_y_continuous(labels = percent) +
+  scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+  expand_limits(y = 0)+
+  labs(title = "% yes by continents over the years with world average",
+       caption = "created by ViSa")
+```
+
+## gdp from WDI
+
+```{r}
+library(WDI)
+```
+
+```{r}
+country_incomes <- WDI(indicator = c(gdp_per_capita = "NY.GDP.PCAP.PP.KD",
+                  pop = "SP.POP.TOTL"),
+    start = 2019, end = 2019, extra = TRUE) %>% 
+  as_tibble() %>% 
+  select(country_code = iso2c, income, gdp_per_capita, pop) %>% 
+  filter(!is.na(income)) %>% 
+  mutate(income = fct_relevel(income, "Low income", "Lower middle income", "Upper middle income"))
+
+country_incomes
+```
+
+```{r}
+plot_by <- function(tbl, category){
+    tbl %>%
+    filter(!is.na({{category}})) %>% 
+    mutate(category = fct_reorder({{category}}, pct_yes)) %>% 
+    
+    ggplot(aes(x = year, y = pct_yes)) +
+    # geom_line(data = by_year, lty = 1, size = 1.8, alpha = 0.3) +
+    geom_line(aes(col = {{category}}), size = 0.9) +
+    scale_y_continuous(labels = percent) +
+    scale_color_discrete(guide = guide_legend(reverse = TRUE)) +
+    expand_limits(y = 0)+
+    labs(title = "% yes by countries over the years with world average",
+       caption = "created by ViSa")
+}
+```
+
+```{r}
+unvotes %>% 
+  inner_join(country_incomes, by = "country_code") %>% 
+  group_by(income,
+           year = year(date)) %>% 
+  summarize_votes() %>% 
+  plot_by(income)
+```
+
+## Correlation bw countries
+
+```{r}
+unvotes %>% 
+  filter(country %in% c("India","Russia")) %>% 
+  select(rcid, country, vote_number) %>% 
+  spread(country, vote_number, fill = 0)
+```
+
+```{r}
+unvotes %>% 
+  filter(country %in% c("India","Canada")) %>% 
+  select(rcid, country, vote_number) %>% 
+  spread(country, vote_number, fill = 0) %>% 
+  summarize(correlation = cor(.[[2]],.[[3]]))
+```
+
+```{r}
+corr_fn <- function(countries_sel = c("India", "United States")){
+  unvotes %>% 
+  filter(country %in% countries_sel) %>% 
+  select(rcid, country, vote_number) %>% 
+  spread(country, vote_number, fill = 0) %>% 
+  summarize(correlation = cor(.[[2]],.[[3]]))
+}
+```
+
+```{r}
+corr_fn(c("India","Pakistan"))
+```
+
+### widyr pairwise corr
+
+```{r}
+library(widyr)
+```
+
+```{r}
+unvotes %>% 
+  pairwise_cor(item = country, feature =  rcid, value =  vote_number, sort = TRUE)
+```
+
+```{r}
+library(tidygraph)
+library(ggraph)
+```
+
+tidygraph & ggraph from: <https://youtu.be/mApnx5NJwQA?t=862>
+
+```{r echo=FALSE}
+# unvotes %>% 
+#   pairwise_cor(item = country, feature =  rcid, 
+#                value =  vote_number, sort = TRUE) %>% 
+#   as_tbl_graph() %>% 
+#   inner_join(y = (unvotes %>% count(country)), by = c(name = "country")) %>% 
+#   ggraph(layout = "fr") +
+#   geom_edge_link(aes(edge_alpha = correlation)) +
+#   geom_node_point(aes(size = n)) +
+#   geom_node_text(aes(label = name), check_overlap = TRUE,
+#                  vjust =1, hjust =1, size = 3) +
+#   theme(legend.position = "none")
+```
+
+```{r}
+unvotes %>% 
+  pairwise_cor(item = country, feature =  rcid, 
+               value =  vote_number, sort = TRUE) %>% 
+  filter(item1 == "India")
+```
+
+```{r}
+corr_tbl <- unvotes %>% 
+  pairwise_cor(item = country, feature =  rcid, 
+               value =  vote_number, sort = TRUE) %>% 
+  # filter(item1 == "India") %>% 
+  
+  left_join(y = (unvotes %>% 
+                  mutate(continent = countrycode(country_code, "iso2c", "continent")) %>% 
+                  select(country, continent) %>% 
+                  distinct()),
+            by = c("item2" = "country")) %>% 
+  rename(continent_item2 = continent)
+
+corr_tbl
+```
+
+```{r}
+corr_tbl %>% 
+  filter(item1 == "India",
+         !is.na(continent_item2)) %>% 
+  arrange(desc(correlation)) %>% 
+  slice(c(1:15, (n()- 0:15) )) %>% 
+  mutate(item2 = str_wrap(item2, width = 25)) %>% 
+  
+  ggplot(aes(x = correlation, 
+             y = reorder_within(item2, by = correlation, within = continent_item2), 
+             col = continent_item2)) +
+  geom_point(show.legend = FALSE) +
+  geom_vline(xintercept = 0, lty = 2, size = 0.9, col = "tomato") +
+  facet_wrap(~continent_item2, scales = "free_y") +
+  scale_y_reordered() +
+  labs(title = "Top & bottom correlated countries in voting in UN to India",
+       y = "",
+       caption = "created by ViSa") +
+   theme(panel.grid.major.x = element_blank())
+```
+
+### correlation of countries {.tabset .tabset-fade .tabset-pills}
+
+```{r}
+top_corr_countries_with <- function(country_selected = "India", top_n_bottom = 15){
+  corr_tbl %>% 
+  filter(item1 == country_selected,
+         !is.na(continent_item2)) %>% 
+  arrange(desc(correlation)) %>% 
+  slice(c(1:top_n_bottom, (n()- 0:top_n_bottom) )) %>% 
+  mutate(item2 = str_wrap(item2, width = 25)) %>% 
+  
+  ggplot(aes(x = correlation, 
+             y = reorder_within(item2, by = correlation, within = continent_item2),
+             col = correlation > 0)) +
+  geom_point() +
+  geom_errorbarh(height = 0, aes(xmin = correlation, xmax = 0)) +
+  geom_vline(xintercept = 0, lty = 2, size = 0.9, col = "midnightblue") +
+  facet_wrap(~continent_item2, scales = "free_y") +
+  scale_y_reordered() +
+  expand_limits(x = 0.8) +
+  labs(title = glue("Top & bottom correlated countries in voting in UN with <i>{country_selected}</i>"),
+       y = "",
+       caption = "created by ViSa") +
+   theme(panel.grid.major.x = element_blank(),
+         panel.grid.major.y = element_blank(),
+         plot.title = ggtext::element_markdown(),
+         legend.position = "none")
+}
+```
+
+#### India
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with(top_n_bottom = 20)
+```
+
+#### France
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("France", top_n_bottom = 20)
+```
+
+#### Pakistan
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Pakistan", top_n_bottom = 20)
+```
+
+#### Russia
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Russia", top_n_bottom = 20)
+```
+
+#### China
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("China", top_n_bottom = 20)
+```
+
+#### Australia
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Australia", top_n_bottom = 20)
+```
+
+#### United Arab Emirates
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("United Arab Emirates", top_n_bottom = 20)
+```
+
+#### Saudi Arabia
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Saudi Arabia", top_n_bottom = 20)
+```
+
+#### Israel
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Israel", top_n_bottom = 20)
+```
+
+#### Turkey
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("Turkey", top_n_bottom = 20)
+```
+
+#### US
+
+```{r fig.width=8, fig.height=6}
+top_corr_countries_with("United States", top_n_bottom = 20)
+```
+
+### Coorelation differences
+
+```{r}
+corr_tbl %>% 
+  group_by(country = item1) %>% 
+  filter(!is.na(correlation)) %>% 
+  mutate_if(is.character, as_factor) %>% #summary()
+  summarise(median_corr = median(correlation),
+            mean_corr = mean(correlation)) %>% 
+  arrange(desc(median_corr))
+```
+
+```{r}
+corr_tbl <- corr_tbl %>% 
+  select(-continent_item2) %>% 
+  
+  mutate(continent1 = countrycode(item1, "country.name", "continent"),
+         continent2 = countrycode(item2, "country.name", "continent"))
+
+corr_tbl
+```
+
+### Intercontinent correlation
+
+```{r}
+corr_tbl %>% 
+  na.omit() %>%
+  
+  group_by(continent1, continent2) %>% 
+  summarise(avg_corr = mean(correlation)) %>%
+  arrange(desc(avg_corr))
+```
+
+```{r}
+intercontinent_corr <- corr_tbl %>% 
+  na.omit() %>% 
+  
+  filter(continent1 == continent2) %>% 
+  group_by(item1) %>% 
+  summarise(avg_intercontinent_correlation = mean(correlation)) %>% 
+  arrange(desc(avg_intercontinent_correlation))
+
+intercontinent_corr
+```
+
+taiwan & israel have least corr which is in negative
+
+```{r}
+library(plotly)
+```
+
+```{r}
+ggplotly(world_data %>%
+  left_join((intercontinent_corr %>% 
+               mutate(country_code = countrycode(item1, "country.name", "iso2c"))
+             ), 
+            by = c("country_code")) %>% 
+  
+  ggplot(aes(x = long, y = lat, group = group, 
+             fill = avg_intercontinent_correlation, label = item1)) +
+  geom_polygon() +
+  theme_map() +
+  scale_fill_gradient2(low = "red", high = "blue", 
+                       midpoint = -0.1) +
+  labs(fill = "avg intercontinent correlation",
+       caption = "created by ViSa"))
+```
+
+both taiwan & israel are hard to be seen in map
+
+## text (issues)
+
+```{r}
+tt$issues %>% 
+  count(issue)
+```
+
+```{r}
+library(tidytext)
+```
+
+```{r}
+tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  count(word, sort = TRUE)
+```
+
+```{r}
+rc_words <- tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  select(rcid, word)
+
+rc_words
+```
+
+```{r}
+unvotes %>% 
+  inner_join(rc_words, by = "rcid")
+```
+
+```{r fig.width=6, fig.height=6}
+unvotes %>% 
+  inner_join(rc_words, by = "rcid") %>% 
+  filter(country == "United States") %>% 
+  group_by(word) %>% 
+  summarize_votes(min_votes = 100) %>% 
+  mutate(word = fct_reorder(word, pct_yes)) %>% 
+  
+  ggplot(aes(pct_yes, word)) +
+  geom_point(aes(size = n_votes))+
+  scale_x_continuous(labels = percent) 
+```
+
+### yes vote words {.tabset .tabset-fade .tabset-pills}
+
+```{r }
+words_yes_votes <- function(country_selected = "India", min_vote_limit = 100){
+    unvotes %>% 
+    inner_join(rc_words, by = "rcid") %>% 
+    filter(country == country_selected) %>% 
+    group_by(word) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes)) %>% 
+    
+    ggplot(aes(pct_yes, word)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) +
+    theme(plot.title = element_markdown()) +
+    labs(title = glue("Most common words for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+#### India
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes() 
+```
+
+#### Pakistan
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes("Pakistan") 
+```
+
+#### Israel
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes("Israel") 
+```
+
+### pair country yes vote words {.tabset .tabset-fade .tabset-pills}
+
+```{r }
+words_yes_votes_multi <- function(country_selected = c("India","Russia"), min_vote_limit = 100){
+    unvotes %>% 
+    inner_join(rc_words, by = "rcid") %>% 
+    filter(country %in% country_selected) %>% 
+    group_by(word, country) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes)) %>% 
+    
+    ggplot(aes(pct_yes, word, col = country)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) +
+    theme(plot.title = element_markdown()) #+
+    # labs(title = glue("Most common words for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+#### Ind/Rus
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes_multi()
+```
+
+#### Ind/Pak
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes_multi(c("India","Pakistan") )
+```
+
+#### Ind/Chi
+
+```{r fig.width=6, fig.height=6}
+words_yes_votes_multi(c("India","China") )
+```
+
+### Diff of yes votes
+
+```{r }
+words_yes_votes_multi_diff <- function(country_selected = c("India","Russia"), min_vote_limit = 100){
+    unvotes %>% 
+    inner_join(rc_words, by = "rcid") %>% 
+    filter(country %in% country_selected) %>% 
+    group_by(word, country) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes, function(x) max(x) - min(x))) %>% 
+    
+    ggplot(aes(pct_yes, word, col = country)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) +
+    theme(plot.title = element_markdown()) #+
+    # labs(title = glue("Most common words for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+```{r}
+words_yes_votes_multi_diff()
+```
+
+## Ngrams
+
+### bi grams
+
+```{r}
+tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =2) %>% 
+  count(word, sort = TRUE)
+```
+
+```{r}
+bi_grams <- tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =2) %>% 
+  na.omit() %>% 
+  anti_join(stop_words, by = "word") %>% 
+  select(rcid, word)
+
+bi_grams
+```
+
+```{r}
+unvotes %>% 
+    inner_join(bi_grams, by = "rcid") %>% 
+    filter(country == "India") %>% 
+    group_by(word) %>% 
+    summarize_votes(min_votes = 20) %>% 
+    mutate(word = fct_reorder(word, pct_yes)) %>% 
+    
+    ggplot(aes(pct_yes, word)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent)
+```
+
+### yes vote bigrams {.tabset .tabset-fade .tabset-pills}
+
+```{r }
+bigrams_yes_votes_multi <- function(country_selected = c("India","Russia"), min_vote_limit = 20)
+  {
+    unvotes %>% 
+    inner_join(bi_grams, by = "rcid") %>% 
+    filter(country %in% country_selected) %>% 
+    group_by(word, country) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes)) %>% 
+    
+    ggplot(aes(pct_yes, word, col = country)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) #+
+    # theme(plot.title = element_markdown()) +
+    # labs(title = glue("Most common bi grams for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+#### Ind/Rus
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi()
+```
+
+#### Ind/Pak
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi(c("India","Pakistan"))
+```
+
+#### Ind/Pak
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi(c("India","United States"))
+```
+
+#### Ind/Fra
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi(c("India","France"))
+```
+
+### yes vote bigrams diff {.tabset .tabset-fade .tabset-pills}
+
+```{r }
+bigrams_yes_votes_multi_diff <- function(country_selected = c("India","Russia"), min_vote_limit = 20)
+  {
+    unvotes %>% 
+    inner_join(bi_grams, by = "rcid") %>% 
+    filter(country %in% country_selected) %>% 
+    group_by(word, country) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes, function(x) max(x) - min(x))) %>% 
+    
+    ggplot(aes(pct_yes, word, col = country)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) #+
+    # theme(plot.title = element_markdown()) +
+    # labs(title = glue("Most common bi grams for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+#### Ind/Rus
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi_diff()
+```
+
+#### Ind/Pak
+
+```{r fig.width=6, fig.height=6}
+bigrams_yes_votes_multi_diff(c("India","Pakistan"))
+```
+
+### quad grams
+
+```{r}
+tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =4) %>% 
+  na.omit() %>% 
+  count(word, sort = TRUE)
+```
+
+```{r}
+quad_grams <- tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =4) %>% 
+  na.omit() %>% 
+  anti_join(stop_words, by = "word") %>% 
+  select(rcid, word)
+
+quad_grams
+```
+
+### yes vote quadgrams {.tabset .tabset-fade .tabset-pills}
+
+```{r }
+quadgrams_yes_votes_multi <- function(country_selected = c("India","Russia"), min_vote_limit = 5)
+  {
+    unvotes %>% 
+    inner_join(quad_grams, by = "rcid") %>% 
+    filter(country %in% country_selected) %>% 
+    group_by(word, country) %>% 
+    summarize_votes(min_votes = min_vote_limit) %>% 
+    mutate(word = fct_reorder(word, pct_yes)) %>% 
+    
+    ggplot(aes(pct_yes, word, col = country)) +
+    geom_point(aes(size = n_votes))+
+    scale_x_continuous(labels = percent) #+
+    # theme(plot.title = element_markdown()) +
+    # labs(title = glue("Most common bi grams for yes votes by <i>{country_selected}</i>"))
+}
+```
+
+#### Ind/Rus
+
+```{r fig.width=6, fig.height=6}
+quadgrams_yes_votes_multi()
+```
+
+#### Ind/Can
+
+```{r fig.width=6, fig.height=6}
+quadgrams_yes_votes_multi(c("India","Canada"))
+```
+
+### kashmir Searc
+
+```{r}
+library(stringr)
+```
+
+```{r}
+tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =2) %>% 
+  na.omit() %>% 
+  anti_join(stop_words, by = "word") %>% 
+  select(rcid, word) %>% 
+  filter(str_detect(word, regex("Kashmir", ignore_case = TRUE)))
+```
+
+```{r}
+tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short, token = "ngrams", n =2) %>% 
+  na.omit() %>% 
+  anti_join(stop_words, by = "word") %>% 
+  select(rcid, word, descr) %>% 
+  filter(str_detect(descr, regex("Kashmir", ignore_case = TRUE)))
+```
+
+## PCA
+
+### on words
+
+```{r}
+rc_words <- tt$roll_calls %>% 
+  filter(!is.na(short)) %>% 
+  unnest_tokens(word, short) %>% 
+  anti_join(stop_words, by = "word") %>% 
+  distinct(rcid, word) %>% 
+  add_count(word, name = "word_count", sort = TRUE) %>%
+  filter(word_count >= 100) %>% 
+  select(rcid, word)
+
+rc_words
+```
+
+```{r}
+by_country_word <- unvotes %>% 
+  inner_join(rc_words, by = "rcid") %>% 
+  group_by(word, country) %>% 
+  summarize_votes(min_votes = 0)
+
+by_country_word
+```
+
+```{r}
+by_country_word %>% 
+  widely_svd( word, country, pct_yes)
+```
+
+```{r fig.width=6, fig.height=6}
+by_country_word %>% 
+  widely_svd(word, country, pct_yes) %>% 
+  filter(dimension == 1) %>% 
+  mutate(word = reorder_within(word, by = value, within = dimension)) %>% 
+  top_n(30, abs(value)) %>%
+  
+  ggplot(aes(x = value, y = word )) +
+  geom_col() +
+  # facet_wrap(~dimension, scale = "free_y") + 
+  scale_y_reordered()
+```
+
+```{r fig.width=8, fig.height=8}
+by_country_word %>% 
+  widely_svd(word, country, pct_yes) %>% 
+  filter(dimension %in% c(1:6)) %>% 
+  mutate(word = reorder_within(word, by = value, within = dimension)) %>% 
+  top_n(90, abs(value)) %>%
+  
+  ggplot(aes(x = value, y = word, fill = value > 0)) +
+  geom_col() +
+  facet_wrap(~dimension, scale = "free_y") +
+  scale_y_reordered() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+
+Restricting number of principal components to 5
+
+```{r fig.width=8, fig.height=8}
+by_country_word %>% 
+  widely_svd(word, country, pct_yes, nv = 5) %>% 
+  # filter(dimension %in% c(1:6)) %>% 
+  mutate(word = reorder_within(word, by = value, within = dimension)) %>% 
+  top_n(120, abs(value)) %>%
+  
+  ggplot(aes(x = value, y = word, fill = value > 0)) +
+  geom_col() +
+  facet_wrap(~dimension, scale = "free_y") +
+  scale_y_reordered() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+
+### On country
+
+```{r fig.width=6, fig.height=6}
+by_country_word %>% 
+  widely_svd(country, word, pct_yes) %>% 
+  filter(dimension %in% c(3)) %>% 
+  mutate(country = reorder_within(country, by = value, within = dimension)) %>% 
+  top_n(25, abs(value)) %>%
+  
+  ggplot(aes(x = value, y = country, fill = value > 0)) +
+  geom_col() +
+  # facet_wrap(~dimension, scale = "free_y") +
+  scale_y_reordered() +
+  theme(axis.text.x = element_text(angle = 90),
+        legend.position = "none")
+```
+
+## Clustering 15 comp
+
+from: <https://youtu.be/mApnx5NJwQA?t=982>
+
+clustering functions are not available in cran package
+
+<https://github.com/dgrtwo/widyr>
+
+```{r}
+# library(devtools)
+# install_github("dgrtwo/widyr")
+```
+
+```{r}
+library(widyr)
+```
+
+widely_kmeans is not there is any version of widyr package.
+
+```{r}
+library(factoextra)
+```
+
+```{r}
+svd_dimen15 <- by_country_word %>% 
+  widely_svd(country, word, pct_yes, nv = 15)
+```
+
+```{r}
+svd_dimen15
+```
+
+```{r}
+sapply(svd_dimen15, function(x) sum(is.na(x))) 
+```
+
+```{r}
+svd_dimen15_wide <-  pivot_wider(data = svd_dimen15, id_cols = country, names_from = dimension, values_from = value)
+
+svd_dimen15_wide
+```
+
+```{r}
+svd_dimen15_wide <- as.data.frame(svd_dimen15_wide)
+```
+
+```{r}
+rownames(svd_dimen15_wide) <- svd_dimen15_wide$country
+```
+
+```{r}
+svd_dimen15_wide <- svd_dimen15_wide[,2:16]
+svd_dimen15_wide
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(svd_dimen15_wide), kmeans, method = "wss")
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(svd_dimen15_wide), kmeans, method = "silhouette")
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(svd_dimen15_wide), kmeans, method = "gap_stat")
+```
+
+### hierarchical cluster
+
+```{r}
+hier5 <- hcut(svd_dimen15_wide, k = 5, stand = TRUE)
+hier5
+```
+
+```{r}
+fviz_dend(hier5, rect = TRUE, cex = 0.5,
+          k_colors = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07", "#ff5733")
+          )
+```
+
+### kmeans
+
+#### 5 clust
+
+```{r}
+set.seed(123)
+
+km.res5 <- kmeans(svd_dimen15_wide, 5, nstart = 25)
+km.res5
+```
+
+```{r}
+km.res5$cluster
+```
+
+```{r}
+table(km.res5$cluster)
+```
+
+```{r}
+aggregate(svd_dimen15_wide, by = list(cluster = km.res5$cluster), mean)
+```
+
+```{r}
+svd_km5<- cbind(svd_dimen15_wide, cluster = km.res5$cluster)
+svd_km5
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res5, 
+             data = svd_dimen15_wide,
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07", "#ff5733"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+#### 7 clust
+
+```{r}
+set.seed(123)
+
+km.res7 <- kmeans(svd_dimen15_wide, 7, nstart = 25)
+km.res7
+```
+
+```{r}
+km.res7$cluster
+```
+
+```{r}
+table(km.res7$cluster)
+```
+
+```{r}
+aggregate(svd_dimen15_wide, by = list(cluster = km.res7$cluster), mean)
+```
+
+```{r}
+svd_km7<- cbind(svd_dimen15_wide, cluster = km.res7$cluster)
+svd_km7
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res7, 
+             data = svd_dimen15_wide,
+             palette = c("#00AFBB","#2E9FDF", "#E7B800", "#FC4E07", 
+                         "#ff5733", "#33ff42", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+## Clustering all comp
+
+```{r}
+svd_dimen_all <- by_country_word %>% 
+  widely_svd(country, word, pct_yes)
+```
+
+```{r}
+svd_dimen_all
+```
+
+```{r}
+svd_dimen_all_wide <-  pivot_wider(data = svd_dimen_all, id_cols = country, names_from = dimension, values_from = value)
+
+svd_dimen_all_wide
+```
+
+```{r}
+svd_dimen_all_wide <- as.data.frame(svd_dimen_all_wide)
+```
+
+```{r}
+rownames(svd_dimen_all_wide) <- svd_dimen_all_wide$country
+```
+
+```{r}
+svd_dimen_all_wide
+```
+
+```{r}
+svd_dimen_all_wide <- svd_dimen_all_wide[,2:30]
+svd_dimen_all_wide
+```
+
+```{r}
+wss <- factoextra::fviz_nbclust(scale(svd_dimen_all_wide), kmeans, method = "wss")
+wss
+```
+
+```{r}
+silhouette <- factoextra::fviz_nbclust(scale(svd_dimen_all_wide), kmeans, method = "silhouette")
+
+silhouette
+```
+
+```{r}
+gap_stat <- factoextra::fviz_nbclust(scale(svd_dimen_all_wide), kmeans, method = "gap_stat")
+
+gap_stat
+```
+
+### kmeans all
+
+#### 2 clust
+
+```{r}
+set.seed(123)
+
+km.res_all_2 <- kmeans(svd_dimen_all_wide, 2, nstart = 25)
+km.res_all_2
+```
+
+```{r}
+km.res_all_2$cluster
+```
+
+```{r}
+table(km.res_all_2$cluster)
+```
+
+```{r}
+aggregate(svd_dimen_all_wide, by = list(cluster = km.res_all_2$cluster), mean)
+```
+
+```{r}
+svd_km_all_2<- cbind(svd_dimen_all_wide, cluster = km.res_all_2$cluster)
+svd_km_all_2
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res_all_2, 
+             data = svd_dimen_all_wide,
+             palette = c("#00AFBB","#E7B800"), # "#2E9FDF", "#FC4E07", "#ff5733"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+#### 6 clust
+
+```{r}
+set.seed(123)
+
+km.res_all_6 <- kmeans(svd_dimen_all_wide, 6, nstart = 25)
+km.res_all_6
+```
+
+```{r}
+# km.res_all_6$cluster
+```
+
+```{r}
+table(km.res_all_6$cluster)
+```
+
+```{r}
+aggregate(svd_dimen_all_wide, by = list(cluster = km.res_all_6$cluster), mean)
+```
+
+```{r}
+svd_km_all_6<- cbind(svd_dimen_all_wide, cluster = km.res_all_6$cluster)
+svd_km_all_6
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res_all_6, 
+             data = svd_dimen_all_wide,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res_all_6, 
+             data = svd_dimen_all_wide,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "6 cluster plots",
+             ggtheme = theme_clean(),
+             ellipse.type = "euclid",
+             repel = TRUE
+             )
+```
+
+```{r}
+svd6_final_df <- rownames_to_column(svd_km_all_6, "country") 
+svd6_final_df
+```
+
+```{r}
+svd6_final_df <- svd6_final_df %>% 
+  select(country, cluster, everything())
+
+svd6_final_df
+```
+
+### World Map 6 clusters
+
+```{r}
+world_data %>%
+  left_join((svd6_final_df %>% 
+               mutate(country_code = countrycode(country, "country.name", "iso2c"))
+             ), 
+            by = c("country_code")) %>% 
+  filter(!is.na(cluster)) %>% 
+  ggplot(aes(x = long, y = lat, group = group, 
+             fill = as.factor(cluster))) +
+  geom_polygon() +
+  theme_map() +
+  scale_fill_discrete() +
+  labs(fill = "cluster",
+       title = "World Clusters based on UN voting",
+       caption = "created by ViSa") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+### Country Flags
+
+from: <https://github.com/vincentarelbundock/countrycode>
+
+```{r}
+library(gt)
+```
+
+Add country Flags to the table
+
+```{r echo = FALSE}
+# svd6_final_df %>% 
+#   mutate(Flags = countrycode(country, "country.name", "unicode.symbol")) %>% 
+#   select(country, Flags, cluster) %>%
+#   gt() 
+```
+
+Flags are not appearing in the table
+
+### Indian cluster
+
+```{r}
+ind_cluster <- svd6_final_df %>% 
+  filter(cluster == (svd6_final_df %>% 
+                      filter(country == "India") %>% 
+                      pull(cluster) )
+  )
+
+ind_cluster
+```
+
+```{r}
+ind_cluster <- ind_cluster %>% 
+  mutate(continent = countrycode(country, "country.name", "continent")) %>% 
+  select(country, continent, cluster, everything())
+
+ind_cluster
+```
+
+#### Plot Indian cluster
+
+```{r fig.width=8, fig.height=6}
+ind_cluster %>% 
+  filter(country != "Zanzibar") %>% 
+  ggplot(aes(x = `1`, y = `2`, col = continent)) +
+  geom_point() +
+  geom_text(aes(label = country)) +
+  labs(title = "India's cluster-3 with Dim1 & 2 on plot")
+```
+
+## yearwise clustering
+
+### 2000 onwards
+
+```{r}
+by_country_word_yr_2000 <- unvotes %>% 
+  inner_join(rc_words, by = "rcid") %>% 
+  mutate(year = year(date)) %>% 
+  filter(year > 1999) %>% 
+  group_by(word, country, year) %>% 
+  summarize_votes(min_votes = 0)
+
+by_country_word_yr_2000
+```
+
+```{r}
+cluster_data_2000 <- by_country_word_yr_2000 %>% 
+  widely_svd(country, word, pct_yes)
+
+cluster_data_2000
+```
+
+```{r}
+cluster_data_2000_wide <- pivot_wider(data = cluster_data_2000, id_cols = country, 
+                                     names_from = dimension, values_from = value)
+
+cluster_data_2000_wide
+```
+
+converting to dataframe / matrix
+
+```{r}
+cluster_data_2000_wide <- as.data.frame(cluster_data_2000_wide) 
+
+rownames(cluster_data_2000_wide) <- cluster_data_2000_wide$country
+
+cluster_data_2000_wide
+```
+
+```{r}
+cluster_data_2000_wide <- cluster_data_2000_wide[, 2:29]
+cluster_data_2000_wide
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(cluster_data_2000_wide), kmeans, method = "wss")
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(cluster_data_2000_wide), kmeans, method = "silhouette")
+```
+
+```{r}
+factoextra::fviz_nbclust(scale(cluster_data_2000_wide), kmeans, method = "gap_stat")
+```
+
+```{r}
+set.seed(123)
+
+km.res4_2000 <- kmeans(cluster_data_2000_wide, 6, nstart = 25)
+```
+
+```{r}
+table(km.res4_2000$cluster)
+```
+
+```{r}
+cluster_data_2000_wide_final <- cbind(cluster_data_2000_wide, cluster = km.res4_2000$cluster)
+cluster_data_2000_wide_final
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res4_2000,
+             data = cluster_data_2000_wide_final,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean(),
+             ellipse.type = "euclid",
+             repel = TRUE
+             )
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res4_2000,
+             data = cluster_data_2000_wide_final,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+```{r}
+cluster_data_2000_wide_final <- rownames_to_column(cluster_data_2000_wide_final, "country") %>% 
+  select(country, cluster, everything())
+
+cluster_data_2000_wide_final
+```
+
+```{r}
+world_data %>% 
+  left_join((cluster_data_2000_wide_final %>% 
+              mutate(country_code = countrycode(country, "country.name", "iso2c"))
+            ), 
+            by = "country_code") %>% 
+  filter(!is.na(cluster)) %>% 
+  
+  ggplot(aes(x = long, y = lat, group = group, fill = as.factor(cluster))) +
+  geom_polygon() +
+  theme_map() +
+  scale_fill_discrete() +
+  labs(fill = "cluster",
+     title = "World Clusters based on UN voting year 2000 onwards",
+     caption = "created by ViSa") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+### Before 2000
+
+```{r}
+by_country_word_yr_19xx <- unvotes %>% 
+  inner_join(rc_words, by = "rcid") %>% 
+  mutate(year = year(date)) %>% 
+  filter(year <= 1999) %>% 
+  group_by(word, country, year) %>% 
+  summarize_votes(min_votes = 0)
+
+by_country_word_yr_19xx
+```
+
+```{r}
+cluster_data_19xx <- by_country_word_yr_19xx %>% 
+  widely_svd(country, word, pct_yes)
+
+cluster_data_19xx
+```
+
+```{r}
+cluster_data_19xx_wide <- pivot_wider(data = cluster_data_19xx, id_cols = country, 
+                                     names_from = dimension, values_from = value)
+
+cluster_data_19xx_wide
+```
+
+converting to dataframe / matrix
+
+```{r}
+cluster_data_19xx_wide <- as.data.frame(cluster_data_19xx_wide) 
+
+rownames(cluster_data_19xx_wide) <- cluster_data_19xx_wide$country
+
+cluster_data_19xx_wide
+```
+
+```{r}
+cluster_data_19xx_wide <- cluster_data_19xx_wide[, 2:30]
+cluster_data_19xx_wide
+```
+
+```{r}
+set.seed(123)
+
+km.res4_19xx <- kmeans(cluster_data_19xx_wide, 6, nstart = 25)
+```
+
+```{r}
+table(km.res4_19xx$cluster)
+```
+
+```{r}
+cluster_data_19xx_wide_final <- cbind(cluster_data_19xx_wide, cluster = km.res4_19xx$cluster)
+cluster_data_19xx_wide_final
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res4_19xx,
+             data = cluster_data_19xx_wide_final,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean(),
+             ellipse.type = "euclid",
+             repel = TRUE
+             )
+```
+
+```{r fig.width=8, fig.height=8}
+fviz_cluster(km.res4_19xx,
+             data = cluster_data_19xx_wide_final,
+             palette = c("#00AFBB","#E7B800", "#2E9FDF", "#FC4E07", "#ff5733", "#f333ff"),
+             main = "cluster plots",
+             ggtheme = theme_clean()
+             )
+```
+
+```{r}
+cluster_data_19xx_wide_final <- rownames_to_column(cluster_data_19xx_wide_final, "country") %>% 
+  select(country, cluster, everything())
+
+cluster_data_19xx_wide_final
+```
+
+```{r}
+world_data %>% 
+  left_join((cluster_data_19xx_wide_final %>% 
+              mutate(country_code = countrycode(country, "country.name", "iso2c"))
+            ), 
+            by = "country_code") %>% 
+  filter(!is.na(cluster)) %>% 
+  
+  ggplot(aes(x = long, y = lat, group = group, fill = as.factor(cluster))) +
+  geom_polygon() +
+  theme_map() +
+  scale_fill_discrete() +
+  labs(fill = "cluster",
+     title = "World 6 Clusters based on UN voting  in 1900's",
+     caption = "created by ViSa") +
+  theme(plot.title = element_text(face = "bold", size = 16))
+```
+
+
+## (attempts)df for all clusters
+
+```{r}
+final_clusters_df <-  svd_dimen_all_wide %>% 
+                        rownames_to_column(var = "country")
+```
+
+
+```{r echo=FALSE}
+
+lapply(1:15,
+function(cluster_num){
+  cluster_res_list <- as.list(kmeans(svd_dimen_all_wide, cluster_num, nstart = 25)) 
+ names(cluster_res_list) <- paste("cluster", 1:length(cluster_res_list), sep="_")
+ list2env(cluster_res_list, envir = .GlobalEnv)
+ 
+ final_clusters_df <- cbind(final_clusters_df, cluster_res_list)
+} ) 
+```
+
+
+
+```{r echo=FALSE}
+as.data.frame(cluster_res_list)
+```
+
+```{r}
+iris
+```
+
+```{r}
+iris_df <- iris %>% 
+  as.data.frame() 
+
+rownames(iris_df) <- 1: nrow(iris_df)
+```
+
+```{r}
+iris_df
+```
+
+```{r}
+lapply(1:3,
+function(cluster_num){
+  cluster_res_list <- as.list(kmeans(iris %>% select(-Species), cluster_num, nstart = 25)) 
+ names(cluster_res_list) <- paste("iris_clus", 1:length(cluster_res_list), sep="_")
+ list2env(cluster_res_list, envir = .GlobalEnv)
+ 
+ # print(head(cluster_res_list))
+ iris_df <- cbind(iris, paste0("iris_clus_", cluster_num))
+} )
+```
+
+```{r}
+iris_df
+```
+
+```{r}
+for(cluster_num in 1:3){
+  km_cluster_res <- kmeans(iris %>% select(-Species), cluster_num, nstart = 25)
+  
+  print(assign(paste("iris_clus", cluster_num,sep = "_"),km_cluster_res$cluster))
+  
+  # iris_df <- cbind(iris, 
+  #                   assign(paste("iris_clus", cluster_num,sep = "_"),
+  #                          km_cluster_res$cluster)
+  # )
+  
+}
+
+# iris_df %>% head()
+```
+
+```{r echo=FALSE}
+iris_df <- iris
+lapply(1:3, function(cluster_num) {
+    iris %>% 
+        select(-Species) %>% 
+        kmeans(centers = cluster_num, nstart = 25) %>% 
+        fitted() %>% 
+        row.names() %>%
+        # tibble(iris_clus = .) %>%
+        tibble(paste0("iris_clus_", cluster_num) = .) %>%
+        cbind(iris_df)
+})
+```
+
+```{r echo=FALSE}
+iris %>% 
+    select(-Species) %>% 
+    kmeans(centers = cluster_num, nstart = 25) %>% 
+    fitted() %>% 
+  row.names() %>% 
+  cbind(iris) %>% 
+  rename(paste0("iris_clus_", cluster_num) = .)
+```
+
+cbind() doesn't combine dataframe of 0 rows with df of non 0 rows, so use below way of doing it.
+
+```{r}
+# final_df <- data.frame()
+final_df <- list()
+
+for(cluster_num in 1:3){
+  km_cluster_res <- kmeans(iris %>% select(-Species), cluster_num, nstart = 25)
+  
+  iris_results <- as.data.frame(km_cluster_res$cluster)
+  names(iris_results) <- paste("iris_clus_", cluster_num, sep="")
+  
+  final_df <- as.data.frame(cbind(final_df, as.matrix(iris_results)) ) 
+
+}
+
+final_df %>% head()
+```
+
+
+In below code combining non 0 rows df with same rows df.
+
+```{r}
+final_df <- iris
+
+for(cluster_num in 1:3){
+  km_cluster_res <- kmeans(iris %>% select(-Species), cluster_num, nstart = 25)
+  
+  iris_results <- as.data.frame(km_cluster_res$cluster)
+  names(iris_results) <- paste("iris_clus_", cluster_num, sep="")
+  
+  final_df <- as.data.frame(cbind(final_df, iris_results) ) 
+  # print(names(final_df))
+
+}
+
+final_df %>% head()
+```
+
+
+from: https://stackoverflow.com/questions/66870535/how-to-dynamically-create-variables-and-combine-it-to-the-dataframe-in-r/66871085?noredirect=1#comment118207648_66871085
+
+```{r}
+clusters <- Reduce(cbind, lapply(1:3, function(cluster_num) {
+
+   result <- iris %>% 
+        select(-Species) %>% 
+        kmeans(centers = cluster_num, nstart = 25) %>% 
+        fitted() %>% 
+        row.names() %>% 
+        tibble(iris_clus = .)
+
+   names(result) <- paste("iris_clus", cluster_num, sep = "_")
+   return(result)
+
+}))
+
+cbind(iris, clusters)
+```
+
+
+
+## (final)df for all clusters
+
+```{r}
+
+final_clusters_df <- svd_dimen_all_wide
+
+for(cluster_num in 1:15){
+  km_cluster_res <- kmeans(final_clusters_df, cluster_num, nstart = 25)
+  
+  results <- as.data.frame(km_cluster_res$cluster)
+  names(results) <- paste("cluster", cluster_num, sep="_")
+  
+  final_clusters_df <- as.data.frame(cbind(final_clusters_df, results) ) 
+
+}
+
+final_clusters_df %>% head()
+```
+
+## ggstream
+
+
+```{r fig.height=6, fig.width=8}
+unvotes %>% 
+  # mutate_all(as.factor) %>% 
+  group_by(years = year(date) , vote) %>% 
+  summarise(count = n(), .groups = "drop_last") %>%
+  # mutate(pct = count/sum(count)) %>% 
+ 
+  
+  ggplot(aes(x = years, y = count, fill = vote)) +
+  ggstream::geom_stream(show.legend = FALSE) +
+  geom_stream_label(aes(label = vote)) +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values = wes_palette("Darjeeling2")) +
+  theme(panel.grid.major = element_blank()) +
+  
+  labs(title = "World UN Voting trend over the years",
+       y = "", x = "",
+       caption = "created by ViSa")
+```
+
+
+```{r fig.height=8, fig.width=6}
+unvotes_plus_continents <-  unvotes %>% 
+  mutate(continent = countrycode(country_code, "iso2c", "continent"))
+
+unvotes_plus_continents %>% 
+  group_by(continent, year = year(date) , vote) %>% 
+  summarise(count = n(), .groups = "drop_last") %>%
+  na.omit() %>% 
+  # mutate(pct = count/sum(count)) %>% 
+ 
+  
+  ggplot(aes(x = year, y = count, fill = vote)) +
+  ggstream::geom_stream(show.legend = FALSE) +
+  geom_stream_label(aes(label = vote)) +
+  scale_y_continuous(labels = comma
+                     #, breaks = seq(-2000,2000, 500)
+                     ) +
+  scale_fill_manual(values = wes_palette("Darjeeling2")) +
+  theme(panel.grid.major = element_blank()) +
+  facet_wrap(~continent) +
+  
+  labs(title = "World UN Voting trend over the years by continent",
+       y = "", x = "",
+       caption = "created by ViSa")
+```
+
+
+
+
+## End of Notebook
+
+
+
